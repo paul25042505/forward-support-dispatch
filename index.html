@@ -22,7 +22,7 @@
     }
   }
   *{box-sizing:border-box}
-  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-serif;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-serif;-webkit-tap-highlight-color:transparent;-webkit-text-size-adjust:100%;text-size-adjust:100%}
   #app{max-width:480px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column;position:relative;background:var(--bg)}
   input,select,textarea,button{font-family:inherit}
   a{color:inherit}
@@ -129,7 +129,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-07-31.9";
+const BUILD_VERSION = "2026-07-31.10";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -152,6 +152,7 @@ const COL_UNITS = "forward_support_units";
 
 const UNITS_INTERNAL = ["營部", "一連", "二連"];
 const STATUS_LABEL = { pending:"待審核", assigned:"已分發", filled:"已完成", rejected:"不核准" };
+const VALID_INTERNAL_ROLES = ["dispatcher", "battalion_hq", "company1", "company2", "admin"];
 
 let currentUser = null;   // Firebase Auth user
 let profile = null;       // Firestore users/{uid} 文件內容
@@ -205,6 +206,11 @@ onAuthStateChanged(auth, async (user) => {
   }
   if (profile.fsr_role === "applicant") {
     gateErrorText = "此帳號為申請單位帳號，請至申請人站登入";
+    await signOut(auth);
+    return;
+  }
+  if (!VALID_INTERNAL_ROLES.includes(profile.fsr_role)) {
+    gateErrorText = `fsr_role 欄位值「${escapeHtml(profile.fsr_role)}」不是合法角色，請確認拼字是否正確（dispatcher／battalion_hq／company1／company2／admin）`;
     await signOut(auth);
     return;
   }
@@ -294,7 +300,7 @@ function renderDispatcherShell() {
   activeSection = "tasks";
   const isAdmin = profile.fsr_role === "admin";
   $app.innerHTML = `
-    ${topbarHtml("前支任務指揮台", (isAdmin ? "管理者" : "承辦人") + " ・ " + (profile.email || ""))}
+    ${topbarHtml("前支任務指揮台", (isAdmin ? "管理者" : "承辦人") + " ・ " + escapeHtml(profile.email || ""))}
     <div class="content" id="content"></div>
     <div class="tabbar">
       <button class="item" data-section="tasks"><div class="ic"></div>任務</button>
@@ -367,10 +373,8 @@ function renderDispatcherCreateView() {
       <div class="field"><label>申請人姓名</label><input id="cName" placeholder="例：陳○○"></div>
     </div>
     <div class="field"><label>任務地點</label><input id="cLoc" placeholder="請輸入地點"></div>
-    <div class="row2">
-      <div class="field"><label>開始時間</label><input id="cStart" type="datetime-local"></div>
-      <div class="field"><label>結束時間</label><input id="cEnd" type="datetime-local"></div>
-    </div>
+    <div class="field"><label>開始時間</label><input id="cStart" type="datetime-local"></div>
+    <div class="field"><label>結束時間</label><input id="cEnd" type="datetime-local"></div>
     <div class="field"><label>備註（選填）</label><textarea id="cRemarks"></textarea></div>
     <div class="field"><label>直接分發給（選填，不選則先進待審核）</label>
       <select id="cAssign">
@@ -509,7 +513,7 @@ function watchRequestsForDispatcher() {
 function renderUnitShell() {
   const unitLabel = unitKeyToLabel(profile.fsr_role);
   $app.innerHTML = `
-    ${topbarHtml("前支任務・" + unitLabel, unitLabel + " ・ " + (profile.email || ""))}
+    ${topbarHtml("前支任務・" + unitLabel, unitLabel + " ・ " + escapeHtml(profile.email || ""))}
     <div class="tabs">
       <div class="tab" data-tab="assigned">待填寫</div>
       <div class="tab" data-tab="filled">已完成</div>
