@@ -104,7 +104,6 @@
   .viewmode-cards{display:flex;gap:10px;margin-bottom:16px}
   .viewmode-card{width:76px;height:76px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:14px;cursor:pointer;font-size:12px;font-weight:600;color:var(--muted)}
   .viewmode-card.active{background:color-mix(in srgb, var(--accent) 14%, transparent);border-color:var(--accent);color:var(--accent)}
-  .viewmode-card .vc-ic{width:22px;height:22px;border-radius:6px;border:1.5px solid currentColor}
   .back-link{display:inline-block;font-family:'JetBrains Mono';font-size:10.5px;color:var(--muted);border:1px solid var(--line);background:var(--panel2);padding:6px 12px;border-radius:20px;cursor:pointer;margin-bottom:14px}
 
   /* ---------- 登入畫面 ---------- */
@@ -150,7 +149,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-07-31.22";
+const BUILD_VERSION = "2026-07-31.23";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -176,6 +175,8 @@ const ICON_HOME = `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" s
 const ICON_TASKS = `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1"/><path d="m8.5 12.5 2 2 4-4.5"/></svg>`;
 const ICON_RECORDS = `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>`;
 const ICON_MORE = `<svg viewBox="0 0 24 24" width="20" height="20" fill="none"><circle cx="5" cy="12" r="1.4" fill="currentColor"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/><circle cx="19" cy="12" r="1.4" fill="currentColor"/></svg>`;
+const ICON_LIST = `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="4.5" cy="6" r="1" fill="currentColor" stroke="none"/><circle cx="4.5" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="4.5" cy="18" r="1" fill="currentColor" stroke="none"/><path d="M9 6h11M9 12h11M9 18h11"/></svg>`;
+const ICON_CALENDAR = `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="16" rx="2"/><path d="M8 3v4M16 3v4M3.5 10h17"/></svg>`;
 
 const UNITS_INTERNAL = ["營部", "一連", "二連"];
 const STATUS_LABEL = { pending:"待審核", assigned:"已分發", filled:"已完成", rejected:"不核准" };
@@ -399,8 +400,8 @@ function renderDispatcherTasksView() {
   const c = document.getElementById("content");
   c.innerHTML = `
     <div class="viewmode-cards">
-      <div class="viewmode-card" data-viewmode="list"><div class="vc-ic"></div>列表</div>
-      <div class="viewmode-card" data-viewmode="calendar"><div class="vc-ic"></div>行事曆</div>
+      <div class="viewmode-card" data-viewmode="list">${ICON_LIST}列表</div>
+      <div class="viewmode-card" data-viewmode="calendar">${ICON_CALENDAR}行事曆</div>
     </div>
     <div id="taskViewArea"></div>`;
   document.querySelectorAll(".viewmode-card").forEach(el => {
