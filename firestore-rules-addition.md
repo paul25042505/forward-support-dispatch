@@ -53,6 +53,19 @@
     }
 ```
 
+## 補充：管理者管理申請單位帳號（第 2 版新增）
+
+新增的「單位帳號」頁面需要管理者能讀取、查詢所有 `fsr_role == "applicant"` 的 `users` 文件，並能編輯其中的 `fsr_unitName` 欄位。
+
+**你的 `users/{uid}` 應該原本就已經有一個 `match` 區塊**（衛生營系統既有的），**不要再另外新增一個 `match /users/{uid} {...}`**（Firestore 不允許同一路徑重複定義），而是把下面這兩條加進「原本那個區塊」的 `allow read` 和 `allow update` 條件裡，用 `||` 串接：
+
+```
+      allow read: if <你原本的條件...> || (isDispatcher() && resource.data.fsr_role == 'applicant');
+      allow update: if <你原本的條件...> || (isDispatcher() && resource.data.fsr_role == 'applicant');
+```
+
+如果你不確定原本的規則長怎樣，把你 Firestore 規則裡 `match /users/{uid} { ... }` 那一段貼給我，我幫你改好整段直接貼回去。
+
 ## 使用者角色設定（`users/{uid}` 文件）
 
 本系統沿用衛生營既有的 `users` collection，但額外用這兩個欄位標記「前支任務申請系統」裡的角色，跟衛生營原本的角色欄位分開，不會互相干擾：
