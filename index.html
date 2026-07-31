@@ -103,7 +103,8 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
-  getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut
+  getAuth, onAuthStateChanged, signInWithRedirect, getRedirectResult,
+  GoogleAuthProvider, signOut
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   getFirestore, doc, getDoc, addDoc, updateDoc, collection,
@@ -125,6 +126,12 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+const googleProvider = new GoogleAuthProvider();
+
+// 處理 Google signInWithRedirect 回跳後的結果（登入失敗時顯示錯誤訊息）
+getRedirectResult(auth).catch((e) => {
+  console.error("Google 登入失敗", e);
+});
 
 // 本系統獨立 collection（避免與衛生營原系統資料衝突）
 const COL_REQUESTS = "forward_support_requests";
@@ -183,26 +190,17 @@ function renderLogin() {
       <h1>前支任務指揮台</h1>
       <p class="sub">FORWARD SUPPORT DISPATCH ・ 衛生營內部人員專用</p>
       <div id="authMsg"></div>
-      ${loginFormHtml()}
+      <button class="btn btn-primary" id="googleLoginBtn">使用 Google 帳號登入</button>
+      <p style="font-size:11px;color:var(--muted);margin-top:14px;text-align:center">請使用你在衛生營系統原本綁定的 Google 帳號登入</p>
     </div>`;
-  document.getElementById("loginBtn").onclick = doLogin;
-}
-
-function loginFormHtml() {
-  return `
-    <div class="field"><label>帳號 EMAIL</label><input id="loginEmail" type="email" placeholder="you@example.com"></div>
-    <div class="field"><label>密碼</label><input id="loginPass" type="password" placeholder="••••••••"></div>
-    <button class="btn btn-primary" id="loginBtn">登入</button>`;
+  document.getElementById("googleLoginBtn").onclick = doLogin;
 }
 
 async function doLogin() {
-  const email = document.getElementById("loginEmail").value.trim();
-  const pass = document.getElementById("loginPass").value;
   const msg = document.getElementById("authMsg");
   msg.innerHTML = "";
-  if (!email || !pass) { msg.innerHTML = `<div class="msg error">請輸入帳號密碼</div>`; return; }
   try {
-    await signInWithEmailAndPassword(auth, email, pass);
+    await signInWithRedirect(auth, googleProvider);
   } catch (e) {
     msg.innerHTML = `<div class="msg error">登入失敗：${authErrorText(e)}</div>`;
   }
@@ -210,9 +208,7 @@ async function doLogin() {
 
 function authErrorText(e) {
   const code = e && e.code || "";
-  if (code.includes("invalid-email")) return "Email 格式不正確";
-  if (code.includes("wrong-password") || code.includes("invalid-credential")) return "帳號或密碼錯誤";
-  if (code.includes("user-not-found")) return "帳號不存在";
+  if (code.includes("popup-closed-by-user") || code.includes("cancelled-popup-request")) return "登入已取消";
   return e.message || "發生未知錯誤";
 }
 
