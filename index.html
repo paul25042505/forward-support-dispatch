@@ -102,6 +102,10 @@
   .tabbar .ic{width:19px;height:19px;border-radius:5px;border:1.5px solid currentColor}
 
   .fab{position:fixed;right:20px;bottom:90px;width:56px;height:56px;border-radius:50%;background:var(--accent);color:var(--fab-text);border:none;font-size:28px;line-height:1;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(0,0,0,.28);z-index:12;cursor:pointer}
+  .viewmode-cards{display:flex;gap:10px;margin-bottom:16px}
+  .viewmode-card{width:76px;height:76px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:14px;cursor:pointer;font-size:12px;font-weight:600;color:var(--muted)}
+  .viewmode-card.active{background:color-mix(in srgb, var(--accent) 14%, transparent);border-color:var(--accent);color:var(--accent)}
+  .viewmode-card .vc-ic{width:22px;height:22px;border-radius:6px;border:1.5px solid currentColor}
   .back-link{display:inline-block;font-family:'JetBrains Mono';font-size:10.5px;color:var(--muted);border:1px solid var(--line);background:var(--panel2);padding:6px 12px;border-radius:20px;cursor:pointer;margin-bottom:14px}
 
   /* ---------- 登入畫面 ---------- */
@@ -147,7 +151,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-07-31.20";
+const BUILD_VERSION = "2026-07-31.21";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -389,12 +393,12 @@ let taskViewMode = "list"; // list | calendar
 function renderDispatcherTasksView() {
   const c = document.getElementById("content");
   c.innerHTML = `
-    <div class="tabs" style="margin:-16px -20px 0;padding:12px 20px;border-bottom:none">
-      <div class="tab" data-viewmode="list">列表</div>
-      <div class="tab" data-viewmode="calendar">行事曆</div>
+    <div class="viewmode-cards">
+      <div class="viewmode-card" data-viewmode="list"><div class="vc-ic"></div>列表</div>
+      <div class="viewmode-card" data-viewmode="calendar"><div class="vc-ic"></div>行事曆</div>
     </div>
     <div id="taskViewArea"></div>`;
-  document.querySelectorAll(".tabs [data-viewmode]").forEach(el => {
+  document.querySelectorAll(".viewmode-card").forEach(el => {
     el.classList.toggle("active", el.dataset.viewmode === taskViewMode);
     el.onclick = () => { taskViewMode = el.dataset.viewmode; renderDispatcherTasksView(); };
   });
