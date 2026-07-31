@@ -1,0 +1,23 @@
+{
+  "hosting": {
+    "public": ".",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**",
+      "CLAUDE.md",
+      "firestore-rules-addition.md",
+      "package.json",
+      "roles.example.json",
+      "set-roles.js",
+      "skills-lock.json",
+      ".agents/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  }
+}

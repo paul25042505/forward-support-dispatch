@@ -1,0 +1,7 @@
+{
+  "dispatcher@example.com": "dispatcher",
+  "battalion-hq@example.com": "battalion_hq",
+  "company1@example.com": "company1",
+  "company2@example.com": "company2",
+  "admin@example.com": "admin"
+}
