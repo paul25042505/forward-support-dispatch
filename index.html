@@ -144,7 +144,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-07-31.18";
+const BUILD_VERSION = "2026-07-31.19";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -546,10 +546,12 @@ function drawAccountsList() {
     ? `<div class="empty">目前還沒有內部人員角色</div>`
     : internalAccounts.map(a => `
       <div class="card">
-        <h3>${escapeHtml(a.rank ? a.rank + " " : "")}${escapeHtml(a.displayName || a.email || a.id)}</h3>
-        <p>Email｜${escapeHtml(a.email || "")}</p>
-        <div class="field" style="margin-top:10px"><label>角色</label>
-          <select id="role-${a.id}">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+          <div style="min-width:0">
+            <h3 style="margin:0 0 3px">${escapeHtml(a.rank ? a.rank + " " : "")}${escapeHtml(a.displayName || a.email || a.id)}</h3>
+            <p style="margin:0">${escapeHtml(a.email || "")}</p>
+          </div>
+          <select id="role-${a.id}" style="flex-shrink:0;width:auto;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12px;color:var(--text)">
             ${Object.entries(ROLE_LABEL).map(([v,l]) => `<option value="${v}" ${a.fsr_role===v?"selected":""}>${l}</option>`).join("")}
           </select>
         </div>
