@@ -181,7 +181,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-07-31.31";
+const BUILD_VERSION = "2026-07-31.32";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -226,6 +226,7 @@ let activeTab = null;
 let gateErrorText = null; // 登入被擋下時要顯示的錯誤訊息（避免 signOut 觸發的重繪把訊息蓋掉）
 let availableTags = [];   // 前支種類標籤快取
 let editingTagId = null;  // 更多頁目前正在編輯（展開顏色選取）的標籤
+let editingInternalId = null; // 更多頁目前正在編輯角色的內部人員 uid
 let unsubTags = null;
 let pickedTagId = null;   // 新增／編輯任務表單目前選取的標籤
 
@@ -760,6 +761,7 @@ const ROLE_LABEL = { dispatcher:"承辦人", battalion_hq:"營部", company1:"�
 
 function renderMoreView() {
   editingTagId = null;
+  editingInternalId = null;
   if (profile.fsr_role !== "admin") {
     const c = document.getElementById("content");
     c.innerHTML = `<div class="empty">目前沒有其他設定項目</div>`;
@@ -793,14 +795,30 @@ function drawAccountsList() {
   const c = document.getElementById("content");
   const internalListHtml = internalAccounts.length === 0
     ? `<div class="empty">目前還沒有內部人員角色</div>`
-    : internalAccounts.map(a => `
+    : internalAccounts.map(a => a.id === editingInternalId ? `
+      <div class="card">
+        <h3 style="margin:0 0 3px">${escapeHtml(a.rank ? a.rank + " " : "")}${escapeHtml(a.displayName || a.email || a.id)}</h3>
+        <p style="margin:0 0 10px">${escapeHtml(a.email || "")}</p>
+        <div class="field"><label>角色</label>
+          <select id="internalrole-${a.id}">
+            ${Object.entries(ROLE_LABEL).map(([v,l]) => `<option value="${v}"${v===a.fsr_role?" selected":""}>${l}</option>`).join("")}
+          </select>
+        </div>
+        <div class="actions">
+          <button class="btn btn-small btn-blue" id="saveinternal-${a.id}">儲存</button>
+          <button class="btn btn-small btn-red" id="delinternal-${a.id}">刪除角色</button>
+        </div>
+      </div>` : `
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
           <div style="min-width:0">
             <h3 style="margin:0 0 3px">${escapeHtml(a.rank ? a.rank + " " : "")}${escapeHtml(a.displayName || a.email || a.id)}</h3>
             <p style="margin:0">${escapeHtml(a.email || "")}</p>
           </div>
-          <span class="tag assigned" style="flex-shrink:0">${escapeHtml(ROLE_LABEL[a.fsr_role] || a.fsr_role)}</span>
+          <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+            <span class="tag assigned">${escapeHtml(ROLE_LABEL[a.fsr_role] || a.fsr_role)}</span>
+            <button class="icon-btn" id="editinternal-${a.id}" aria-label="編輯角色">${ICON_EDIT}</button>
+          </div>
         </div>
       </div>`).join("");
 
@@ -877,6 +895,18 @@ function drawAccountsList() {
     ${tagListHtml}`;
 
   document.getElementById("setRoleBtn").onclick = doSetInternalRole;
+  internalAccounts.forEach(a => {
+    if (a.id !== editingInternalId) {
+      document.getElementById(`editinternal-${a.id}`).onclick = () => { editingInternalId = a.id; drawAccountsList(); };
+      return;
+    }
+    document.getElementById(`saveinternal-${a.id}`).onclick = async () => {
+      await saveInternalRoleNow(a.id, document.getElementById(`internalrole-${a.id}`).value);
+      editingInternalId = null;
+      drawAccountsList();
+    };
+    document.getElementById(`delinternal-${a.id}`).onclick = () => deleteInternalRoleNow(a);
+  });
   applicantAccounts.forEach(a => {
     document.getElementById(`saveunit-${a.id}`).onclick = () => saveUnitName(a);
     document.getElementById(`resetpw-${a.id}`).onclick = () => sendResetPassword(a);
@@ -958,6 +988,20 @@ async function doSetInternalRole() {
   } catch (e) {
     msg.innerHTML = `<div class="msg error">設定失敗：${e.message}</div>`;
   }
+}
+
+async function saveInternalRoleNow(id, role) {
+  try {
+    await updateDoc(doc(db, "users", id), { fsr_role: role });
+  } catch (e) { alert("更新失敗：" + e.message); }
+}
+
+async function deleteInternalRoleNow(a) {
+  const displayName = (a.rank ? a.rank + " " : "") + (a.displayName || a.email || a.id);
+  if (!confirm(`確定要移除 ${displayName} 的內部人員角色嗎？對方將無法再登入這個系統，直到重新設定角色。`)) return;
+  try {
+    await updateDoc(doc(db, "users", a.id), { fsr_role: "" });
+  } catch (e) { alert("刪除失敗：" + e.message); }
 }
 
 async function saveUnitName(a) {
