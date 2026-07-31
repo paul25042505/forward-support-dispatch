@@ -1,0 +1,12 @@
+{
+  "name": "forward-support-dispatch-admin-scripts",
+  "private": true,
+  "version": "1.0.0",
+  "description": "管理腳本：批次設定 Firestore users/{uid} 的 fsr_role 欄位",
+  "scripts": {
+    "set-roles": "node set-roles.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.0.0"
+  }
+}
