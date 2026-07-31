@@ -60,6 +60,11 @@ For multi-step tasks, state a brief plan:
 
 Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
 
+## 5. Known Platform Quirks
+
+### iOS Safari date/time rendering
+On iOS Safari, native date/time elements (`<input type="date">`, `type="time"`, `type="datetime-local"`, and system-rendered date pickers) ignore author-set `width`/`height`/`padding` below iOS's own minimum rendering size — the control renders at its native size regardless, which overflows any fixed-size container built for it. Don't assume a fixed height/width will contain these elements on iOS; test on an actual iPhone or size the container flexibly instead. This has recurred across multiple of this user's systems, not just this one.
+
 ---
 
 **These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
