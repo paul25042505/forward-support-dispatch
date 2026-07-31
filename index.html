@@ -26,8 +26,8 @@
   *{box-sizing:border-box}
   html,body{margin:0;height:100%;overflow:hidden;background:var(--page-bg);color:var(--text);font-family:'Noto Sans TC',sans-serif;-webkit-tap-highlight-color:transparent;-webkit-text-size-adjust:100%;text-size-adjust:100%;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:manipulation}
   input,textarea{-webkit-user-select:text;user-select:text}
-  #app{max-width:var(--app-max-width);margin:0 auto;min-height:100vh;display:flex;flex-direction:column;position:relative;background:var(--bg);overflow-x:hidden}
-  @media (min-width:768px){ #app{box-shadow:0 0 0 1px var(--line);min-height:100vh} }
+  #app{max-width:var(--app-max-width);margin:0 auto;height:100vh;display:flex;flex-direction:column;position:relative;background:var(--bg);overflow:hidden}
+  @media (min-width:768px){ #app{box-shadow:0 0 0 1px var(--line)} }
   input,select,textarea,button{font-family:inherit}
   a{color:inherit}
 
@@ -180,7 +180,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-07-31.28";
+const BUILD_VERSION = "2026-07-31.29";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
