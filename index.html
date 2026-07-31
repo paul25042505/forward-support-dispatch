@@ -101,6 +101,9 @@
   .tabbar .item.active{color:var(--accent);font-weight:700}
   .tabbar .ic{width:19px;height:19px;border-radius:5px;border:1.5px solid currentColor}
 
+  .fab{position:fixed;right:20px;bottom:90px;width:56px;height:56px;border-radius:50%;background:var(--accent);color:var(--fab-text);border:none;font-size:28px;line-height:1;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(0,0,0,.28);z-index:12;cursor:pointer}
+  .back-link{display:inline-block;font-family:'JetBrains Mono';font-size:10.5px;color:var(--muted);border:1px solid var(--line);background:var(--panel2);padding:6px 12px;border-radius:20px;cursor:pointer;margin-bottom:14px}
+
   /* ---------- 登入畫面 ---------- */
   .auth-wrap{flex:1;display:flex;flex-direction:column;justify-content:center;padding:32px 28px}
   .auth-wrap .brand-mark{width:44px;height:44px;border:2px solid var(--accent);border-radius:6px;display:flex;align-items:center;justify-content:center;transform:rotate(45deg);margin-bottom:20px}
@@ -144,7 +147,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-07-31.19";
+const BUILD_VERSION = "2026-07-31.20";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -309,51 +312,114 @@ function bindLogout(){ document.getElementById("logoutBtn").onclick = () => sign
 // ==============================================================
 // 承辦人 / 管理者
 // ==============================================================
-let activeSection = "tasks"; // tasks | create | accounts（承辦人/管理者用）
+let activeSection = "home"; // home | tasks | records | more | create（承辦人/管理者用）
+let fabReturnSection = "home";
 
 function renderDispatcherShell() {
-  activeSection = "tasks";
+  activeSection = "home";
   const isAdmin = profile.fsr_role === "admin";
   $app.innerHTML = `
     ${topbarHtml("前支任務指揮台", (isAdmin ? "管理者" : "承辦人") + " ・ " + escapeHtml(displayNameOf(profile)))}
     <div class="content" id="content"></div>
+    <button class="fab" id="fabCreate">+</button>
     <div class="tabbar">
+      <button class="item" data-section="home"><div class="ic"></div>首頁</button>
       <button class="item" data-section="tasks"><div class="ic"></div>任務</button>
-      <button class="item" data-section="calendar"><div class="ic"></div>行事曆</button>
-      <button class="item" data-section="create"><div class="ic"></div>新增任務</button>
-      ${isAdmin ? `<button class="item" data-section="accounts"><div class="ic"></div>單位帳號</button>` : ""}
+      <button class="item" data-section="records"><div class="ic"></div>紀錄</button>
+      <button class="item" data-section="more"><div class="ic"></div>更多</button>
     </div>`;
   bindLogout();
   document.querySelectorAll(".tabbar [data-section]").forEach(el => el.onclick = () => { activeSection = el.dataset.section; renderDispatcherSection(); });
+  document.getElementById("fabCreate").onclick = () => { fabReturnSection = activeSection; activeSection = "create"; renderDispatcherSection(); };
   renderDispatcherSection();
 }
 
 function renderDispatcherSection() {
   document.querySelectorAll(".tabbar .item[data-section]").forEach(el => el.classList.toggle("active", el.dataset.section === activeSection));
-  if (activeSection === "tasks") renderDispatcherTasksView();
-  else if (activeSection === "calendar") renderCalendarView();
+  document.getElementById("fabCreate").style.display = (activeSection === "home" || activeSection === "tasks") ? "flex" : "none";
+  if (activeSection === "home") renderHomeView();
+  else if (activeSection === "tasks") renderDispatcherTasksView();
+  else if (activeSection === "records") renderRecordsView();
+  else if (activeSection === "more") renderMoreView();
   else if (activeSection === "create") renderDispatcherCreateView();
-  else if (activeSection === "accounts") renderAccountsView();
 }
 
-// ---- 子頁：任務清單（含狀態篩選）----
+// ---- 子頁：首頁（待審核任務 + 本週任務總覽）----
+function renderHomeView() {
+  const c = document.getElementById("content");
+  const pending = allRequests.filter(r => r.status === "pending");
+  const weekTasks = allRequests.filter(r => r.taskStartTime && isThisWeek(tsToDate(r.taskStartTime)));
+  const statsHtml = `
+    <div class="stats">
+      <div class="stat amber"><div class="n">${pending.length}</div><div class="l">待審核</div></div>
+      <div class="stat blue"><div class="n">${weekTasks.length}</div><div class="l">本週任務</div></div>
+    </div>`;
+  const pendingHtml = pending.length === 0
+    ? `<div class="empty">目前沒有待審核任務</div>`
+    : pending.map(r => taskCardHtml(r, true)).join("");
+  const weekHtml = weekTasks.length === 0
+    ? `<div class="empty">本週目前沒有排定的任務</div>`
+    : weekTasks.map(r => taskCardHtml(r, false)).join("");
+  c.innerHTML = statsHtml +
+    `<div class="section-lbl">待審核</div>${pendingHtml}` +
+    `<div class="section-lbl" style="margin-top:22px">本週任務</div>${weekHtml}`;
+  pending.forEach(r => {
+    const assignBtn = document.getElementById(`assign-${r.id}`);
+    if (assignBtn) assignBtn.onclick = () => openAssignPrompt(r);
+    const rejectBtn = document.getElementById(`reject-${r.id}`);
+    if (rejectBtn) rejectBtn.onclick = () => rejectRequest(r);
+  });
+}
+
+function tsToDate(ts) { return ts.toDate ? ts.toDate() : new Date(ts); }
+function isThisWeek(d) {
+  const now = new Date();
+  const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay());
+  const endOfWeek = new Date(startOfWeek.getFullYear(), startOfWeek.getMonth(), startOfWeek.getDate() + 7);
+  return d >= startOfWeek && d < endOfWeek;
+}
+function isThisMonth(d) {
+  const now = new Date();
+  return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+}
+
+// ---- 子頁：任務（列表／行事曆切換）----
+let taskViewMode = "list"; // list | calendar
+
 function renderDispatcherTasksView() {
   const c = document.getElementById("content");
   c.innerHTML = `
-    <div class="tabs" style="margin:-16px -20px 16px;padding:12px 20px">
+    <div class="tabs" style="margin:-16px -20px 0;padding:12px 20px;border-bottom:none">
+      <div class="tab" data-viewmode="list">列表</div>
+      <div class="tab" data-viewmode="calendar">行事曆</div>
+    </div>
+    <div id="taskViewArea"></div>`;
+  document.querySelectorAll(".tabs [data-viewmode]").forEach(el => {
+    el.classList.toggle("active", el.dataset.viewmode === taskViewMode);
+    el.onclick = () => { taskViewMode = el.dataset.viewmode; renderDispatcherTasksView(); };
+  });
+  if (taskViewMode === "calendar") { renderCalendarView(); return; }
+  renderTaskListSubview();
+}
+
+// ---- 子頁：任務清單（含狀態篩選）----
+function renderTaskListSubview() {
+  const area = document.getElementById("taskViewArea");
+  area.innerHTML = `
+    <div class="tabs" style="margin:0 -20px 16px;padding:12px 20px">
       <div class="tab" data-tab="pending">待審核</div>
       <div class="tab" data-tab="assigned">已分發</div>
       <div class="tab" data-tab="filled">已完成</div>
       <div class="tab" data-tab="all">全部</div>
     </div>
     <div id="taskListArea"></div>`;
-  document.querySelectorAll(".tabs [data-tab]").forEach(el => el.onclick = () => { activeTab = el.dataset.tab; renderDispatcherContent(); });
+  document.querySelectorAll("#taskViewArea .tabs [data-tab]").forEach(el => el.onclick = () => { activeTab = el.dataset.tab; renderDispatcherContent(); });
   if (!activeTab || !["pending","assigned","filled","all"].includes(activeTab)) activeTab = "pending";
   renderDispatcherContent();
 }
 
 function renderDispatcherContent() {
-  document.querySelectorAll(".tabs .tab").forEach(el => el.classList.toggle("active", el.dataset.tab === activeTab));
+  document.querySelectorAll("#taskViewArea .tabs .tab").forEach(el => el.classList.toggle("active", el.dataset.tab === activeTab));
   const area = document.getElementById("taskListArea");
   if (!area) return;
   const counts = {
@@ -386,7 +452,7 @@ let selectedCalendarDate = null;
 function fmtDateKey(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; }
 
 function renderCalendarView() {
-  const c = document.getElementById("content");
+  const c = document.getElementById("taskViewArea");
   const y = calendarMonth.getFullYear(), m = calendarMonth.getMonth();
   const firstDay = new Date(y, m, 1);
   const startWeekday = firstDay.getDay();
@@ -448,10 +514,39 @@ function renderCalendarView() {
   });
 }
 
+// ---- 子頁：紀錄（本人／本週／本月）----
+let recordFilter = "week"; // self | week | month
+
+function renderRecordsView() {
+  const c = document.getElementById("content");
+  c.innerHTML = `
+    <div class="tabs" style="margin:-16px -20px 16px;padding:12px 20px">
+      <div class="tab" data-recfilter="self">本人</div>
+      <div class="tab" data-recfilter="week">本週</div>
+      <div class="tab" data-recfilter="month">本月</div>
+    </div>
+    <div id="recordListArea"></div>`;
+  document.querySelectorAll(".tabs [data-recfilter]").forEach(el => el.onclick = () => { recordFilter = el.dataset.recfilter; drawRecordsList(); });
+  drawRecordsList();
+}
+
+function drawRecordsList() {
+  document.querySelectorAll(".tabs [data-recfilter]").forEach(el => el.classList.toggle("active", el.dataset.recfilter === recordFilter));
+  const area = document.getElementById("recordListArea");
+  if (!area) return;
+  let list = allRequests;
+  if (recordFilter === "self") list = list.filter(r => r.reviewedBy === currentUser.uid || r.createdBy === currentUser.uid);
+  else if (recordFilter === "week") list = list.filter(r => r.taskStartTime && isThisWeek(tsToDate(r.taskStartTime)));
+  else if (recordFilter === "month") list = list.filter(r => r.taskStartTime && isThisMonth(tsToDate(r.taskStartTime)));
+  area.innerHTML = list.length === 0
+    ? `<div class="empty">這個範圍內沒有任務紀錄</div>`
+    : list.map(r => taskCardHtml(r, false)).join("");
+}
 
 function renderDispatcherCreateView() {
   const c = document.getElementById("content");
   c.innerHTML = `
+    <button class="back-link" id="backFromCreate">← 返回</button>
     <div id="createMsg"></div>
     <div class="field"><label>申請單位</label><input id="cUnit" placeholder="例：台中市消防局大甲分隊"></div>
     <div class="row2">
@@ -472,6 +567,7 @@ function renderDispatcherCreateView() {
     </div>
     <button class="btn btn-primary" id="createBtn">送出任務</button>`;
   document.getElementById("createBtn").onclick = doDispatcherCreate;
+  document.getElementById("backFromCreate").onclick = () => { activeSection = fabReturnSection; renderDispatcherSection(); };
 }
 
 async function doDispatcherCreate() {
@@ -512,12 +608,21 @@ async function doDispatcherCreate() {
   }
 }
 
-// ---- 子頁：單位帳號管理（管理者專用）----
+// ---- 子頁：更多（管理者：帳號管理；一般承辦人：目前無項目）----
 let applicantAccounts = [];
 let internalAccounts = [];
 let unsubAccounts = null;
 let unsubInternalAccounts = null;
 const ROLE_LABEL = { dispatcher:"承辦人", battalion_hq:"營部", company1:"一連", company2:"二連", admin:"管理者" };
+
+function renderMoreView() {
+  if (profile.fsr_role !== "admin") {
+    const c = document.getElementById("content");
+    c.innerHTML = `<div class="empty">目前沒有其他設定項目</div>`;
+    return;
+  }
+  renderAccountsView();
+}
 
 function renderAccountsView() {
   const c = document.getElementById("content");
@@ -527,7 +632,7 @@ function renderAccountsView() {
   const q = query(collection(db, "users"), where("fsr_role", "==", "applicant"));
   unsubAccounts = onSnapshot(q, (snap) => {
     applicantAccounts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    if (activeSection === "accounts") drawAccountsList();
+    if (activeSection === "more") drawAccountsList();
   }, (e) => {
     c.innerHTML = `<div class="msg error">讀取失敗：${e.message}（可能是 Firestore 規則還沒開放管理者讀取 users）</div>`;
   });
@@ -536,7 +641,7 @@ function renderAccountsView() {
   const q2 = query(collection(db, "users"), where("fsr_role", "in", ["dispatcher","battalion_hq","company1","company2","admin"]));
   unsubInternalAccounts = onSnapshot(q2, (snap) => {
     internalAccounts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    if (activeSection === "accounts") drawAccountsList();
+    if (activeSection === "more") drawAccountsList();
   });
 }
 
@@ -678,8 +783,9 @@ function watchRequestsForDispatcher() {
   const q = query(collection(db, COL_REQUESTS), orderBy("createdAt", "desc"));
   unsubRequests = onSnapshot(q, (snap) => {
     allRequests = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    if (activeSection === "tasks") renderDispatcherContent();
-    else if (activeSection === "calendar") renderCalendarView();
+    if (activeSection === "home") renderHomeView();
+    else if (activeSection === "tasks") { if (taskViewMode === "calendar") renderCalendarView(); else renderDispatcherContent(); }
+    else if (activeSection === "records") drawRecordsList();
   });
 }
 
