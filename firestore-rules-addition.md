@@ -53,6 +53,27 @@
     }
 ```
 
+## 補充：任務刪除、前支種類標籤（第 4 版新增）
+
+「任務」卡片現在多了「編輯／複製到其他日期／刪除」選單。編輯跟複製都是既有的 `update`／`create` 權限就能做，但**刪除**目前完全被擋住（`allow delete: if false;`），需要放寬成：**只有承辦人／管理者能刪除「自己內部建立」的任務**（`createdByDispatcher == true`），外部單位送來的申請仍然不能刪除、只能駁回，維持原本的稽核設計。
+
+把原本 `forward_support_requests` 區塊裡的這一行：
+```
+      allow delete: if false;
+```
+改成：
+```
+      allow delete: if isDispatcher() && resource.data.createdByDispatcher == true;
+```
+
+另外新增了「前支種類標籤」功能（`forward_support_tags` collection，管理者在「更多」頁新增/編輯/刪除標籤，承辦人在建立/編輯任務時挑選），需要在 `match /databases/{database}/documents { ... }` 區塊裡**新增**這個 `match`：
+```
+    match /forward_support_tags/{tagId} {
+      allow read: if isDispatcher();
+      allow write: if request.auth != null && fsrRole() == 'admin';
+    }
+```
+
 ## 補充：管理者管理內部人員角色與申請單位帳號（第 3 版新增）
 
 「單位帳號」頁面現在多了「設定內部人員角色」功能，**管理者**（`fsr_role == 'admin'`）需要能：
