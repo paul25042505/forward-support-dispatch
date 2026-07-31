@@ -23,7 +23,7 @@
   }
   *{box-sizing:border-box}
   html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-serif;-webkit-tap-highlight-color:transparent;-webkit-text-size-adjust:100%;text-size-adjust:100%}
-  #app{max-width:480px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column;position:relative;background:var(--bg)}
+  #app{max-width:480px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column;position:relative;background:var(--bg);overflow-x:hidden}
   input,select,textarea,button{font-family:inherit}
   a{color:inherit}
 
@@ -39,7 +39,7 @@
   .tab{font-family:'JetBrains Mono';font-size:11px;padding:6px 12px;border-radius:20px;background:var(--panel2);color:var(--muted);border:1px solid var(--line);white-space:nowrap;cursor:pointer;flex-shrink:0}
   .tab.active{background:color-mix(in srgb, var(--accent) 14%, transparent);color:var(--accent);border-color:var(--accent);font-weight:700}
 
-  .content{flex:1;padding:16px 20px 110px;overflow-y:auto}
+  .content{flex:1;min-width:0;padding:16px 20px 110px;overflow-y:auto}
 
   .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:12px;box-shadow:var(--shadow)}
   .task-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;gap:8px}
@@ -57,7 +57,8 @@
 
   .field{margin-bottom:14px}
   .field label{display:block;font-family:'JetBrains Mono';font-size:10.5px;color:var(--muted);letter-spacing:.06em;margin-bottom:6px}
-  .field input, .field select, .field textarea{width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:11px 12px;font-size:13.5px;color:var(--text)}
+  .field input, .field select, .field textarea{width:100%;max-width:100%;min-width:0;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:11px 12px;font-size:13.5px;color:var(--text)}
+  .field input[type="datetime-local"]{-webkit-appearance:none;appearance:none}
   .field textarea{resize:vertical;min-height:64px}
   .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 
@@ -129,7 +130,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-07-31.11";
+const BUILD_VERSION = "2026-07-31.12";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
