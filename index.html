@@ -81,6 +81,19 @@
   .stat .l{font-size:10px;color:var(--muted);margin-top:2px}
   .stat.amber .n{color:var(--amber)} .stat.blue .n{color:var(--blue)} .stat.green .n{color:var(--green)}
 
+  /* ---------- 行事曆 ---------- */
+  .cal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+  .cal-title{font-family:'Chakra Petch';font-weight:700;font-size:15px}
+  .cal-nav{background:var(--panel2);border:1px solid var(--line);color:var(--text);width:32px;height:32px;border-radius:8px;font-size:16px;cursor:pointer}
+  .cal-weekdays{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;font-size:10.5px;color:var(--muted);margin-bottom:6px;font-family:'JetBrains Mono'}
+  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+  .cal-cell{aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:8px;cursor:pointer;background:var(--panel);border:1px solid var(--line)}
+  .cal-cell.empty{visibility:hidden;cursor:default}
+  .cal-cell .daynum{font-size:12.5px}
+  .cal-cell.today{border-color:var(--accent);color:var(--accent);font-weight:700}
+  .cal-cell.selected{background:color-mix(in srgb, var(--accent) 16%, transparent);border-color:var(--accent)}
+  .cal-cell .dot{width:5px;height:5px;border-radius:50%;background:var(--accent);margin-top:3px}
+
   .tabbar{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;height:74px;background:var(--panel);border-top:1px solid var(--line);display:flex;padding-bottom:14px;z-index:10}
   .tabbar .item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:10px;color:var(--muted);cursor:pointer;background:none;border:none;font-family:inherit}
   .tabbar .item.active{color:var(--accent);font-weight:700}
@@ -129,7 +142,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-07-31.9";
+const BUILD_VERSION = "2026-07-31.10";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -298,6 +311,7 @@ function renderDispatcherShell() {
     <div class="content" id="content"></div>
     <div class="tabbar">
       <button class="item" data-section="tasks"><div class="ic"></div>任務</button>
+      <button class="item" data-section="calendar"><div class="ic"></div>行事曆</button>
       <button class="item" data-section="create"><div class="ic"></div>新增任務</button>
       ${isAdmin ? `<button class="item" data-section="accounts"><div class="ic"></div>單位帳號</button>` : ""}
     </div>`;
@@ -309,6 +323,7 @@ function renderDispatcherShell() {
 function renderDispatcherSection() {
   document.querySelectorAll(".tabbar .item[data-section]").forEach(el => el.classList.toggle("active", el.dataset.section === activeSection));
   if (activeSection === "tasks") renderDispatcherTasksView();
+  else if (activeSection === "calendar") renderCalendarView();
   else if (activeSection === "create") renderDispatcherCreateView();
   else if (activeSection === "accounts") renderAccountsView();
 }
@@ -356,7 +371,76 @@ function renderDispatcherContent() {
   });
 }
 
-// ---- 子頁：手動新增任務（承辦人代外部單位登記，或用於電話通報的任務）----
+// ---- 子頁：行事曆（依任務開始時間看每天有哪些前支任務）----
+let calendarMonth = new Date();
+let selectedCalendarDate = null;
+
+function fmtDateKey(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; }
+
+function renderCalendarView() {
+  const c = document.getElementById("content");
+  const y = calendarMonth.getFullYear(), m = calendarMonth.getMonth();
+  const firstDay = new Date(y, m, 1);
+  const startWeekday = firstDay.getDay();
+  const daysInMonth = new Date(y, m + 1, 0).getDate();
+
+  const byDate = {};
+  allRequests.forEach(r => {
+    if (!r.taskStartTime) return;
+    const d = r.taskStartTime.toDate ? r.taskStartTime.toDate() : new Date(r.taskStartTime);
+    const key = fmtDateKey(d);
+    (byDate[key] = byDate[key] || []).push(r);
+  });
+
+  const todayKey = fmtDateKey(new Date());
+  let cellsHtml = "";
+  for (let i = 0; i < startWeekday; i++) cellsHtml += `<div class="cal-cell empty"></div>`;
+  for (let day = 1; day <= daysInMonth; day++) {
+    const key = `${y}-${String(m+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+    const count = (byDate[key] || []).length;
+    cellsHtml += `<div class="cal-cell ${key===todayKey?"today":""} ${key===selectedCalendarDate?"selected":""}" data-date="${key}">
+      <span class="daynum">${day}</span>
+      ${count > 0 ? `<span class="dot"></span>` : ""}
+    </div>`;
+  }
+
+  c.innerHTML = `
+    <div class="cal-header">
+      <button class="cal-nav" id="calPrev">‹</button>
+      <div class="cal-title">${y} 年 ${m+1} 月</div>
+      <button class="cal-nav" id="calNext">›</button>
+    </div>
+    <div class="cal-weekdays">${["日","一","二","三","四","五","六"].map(w=>`<div>${w}</div>`).join("")}</div>
+    <div class="cal-grid">${cellsHtml}</div>
+    <div id="calDayList" style="margin-top:18px"></div>`;
+
+  document.getElementById("calPrev").onclick = () => { calendarMonth = new Date(y, m-1, 1); renderCalendarView(); };
+  document.getElementById("calNext").onclick = () => { calendarMonth = new Date(y, m+1, 1); renderCalendarView(); };
+  document.querySelectorAll(".cal-cell[data-date]").forEach(el => {
+    el.onclick = () => { selectedCalendarDate = el.dataset.date; renderCalendarView(); };
+  });
+
+  const listEl = document.getElementById("calDayList");
+  if (!selectedCalendarDate) {
+    listEl.innerHTML = `<div class="empty">點選上方日期查看當天的前支任務</div>`;
+    return;
+  }
+  const list = byDate[selectedCalendarDate] || [];
+  if (list.length === 0) {
+    listEl.innerHTML = `<div class="section-lbl">${selectedCalendarDate}</div><div class="empty">這天沒有任務</div>`;
+    return;
+  }
+  listEl.innerHTML = `<div class="section-lbl">${selectedCalendarDate} ・ 共 ${list.length} 筆</div>` +
+    list.map(r => taskCardHtml(r, r.status === "pending")).join("");
+  list.forEach(r => {
+    const assignBtn = document.getElementById(`assign-${r.id}`);
+    if (assignBtn) assignBtn.onclick = () => openAssignPrompt(r);
+    const rejectBtn = document.getElementById(`reject-${r.id}`);
+    if (rejectBtn) rejectBtn.onclick = () => rejectRequest(r);
+  });
+}
+
+
 function renderDispatcherCreateView() {
   const c = document.getElementById("content");
   c.innerHTML = `
@@ -500,6 +584,7 @@ function watchRequestsForDispatcher() {
   unsubRequests = onSnapshot(q, (snap) => {
     allRequests = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     if (activeSection === "tasks") renderDispatcherContent();
+    else if (activeSection === "calendar") renderCalendarView();
   });
 }
 
