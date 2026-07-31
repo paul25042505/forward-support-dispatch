@@ -53,15 +53,25 @@
     }
 ```
 
-## 補充：管理者管理申請單位帳號（第 2 版新增）
+## 補充：管理者管理內部人員角色與申請單位帳號（第 3 版新增）
 
-新增的「單位帳號」頁面需要管理者能讀取、查詢所有 `fsr_role == "applicant"` 的 `users` 文件，並能編輯其中的 `fsr_unitName` 欄位。
+「單位帳號」頁面現在多了「設定內部人員角色」功能，**管理者**（`fsr_role == 'admin'`）需要能：
+- 用 email 查詢任何一個 `users` 文件（不限角色，因為對方可能還沒設定過 `fsr_role`）
+- 讀取所有 `fsr_role` 屬於前支任務系統角色的 `users` 文件
+- 更新任何 `users` 文件的 `fsr_role` 欄位
 
-**你的 `users/{uid}` 應該原本就已經有一個 `match` 區塊**（衛生營系統既有的），**不要再另外新增一個 `match /users/{uid} {...}`**（Firestore 不允許同一路徑重複定義），而是把下面這兩條加進「原本那個區塊」的 `allow read` 和 `allow update` 條件裡，用 `||` 串接：
+這個權限只開放給 `admin`，**承辦人（dispatcher）不行**，跟系統角色權限表一致。
+
+把 `fsrRole()` 之後加這行：
+```
+    function isAdmin() { return request.auth != null && fsrRole() == 'admin'; }
+```
+
+**你的 `users/{uid}` 應該原本就已經有一個 `match` 區塊**（衛生營系統既有的），**不要再另外新增一個 `match /users/{uid} {...}`**（Firestore 不允許同一路徑重複定義），而是把下面這兩條加進「原本那個區塊」的 `allow read` 和 `allow update` 條件裡，用 `||` 串接（**這條會取代第 2 版加的那條**，範圍更廣，涵蓋內部人員 + 申請單位）：
 
 ```
-      allow read: if <你原本的條件...> || (isDispatcher() && resource.data.fsr_role == 'applicant');
-      allow update: if <你原本的條件...> || (isDispatcher() && resource.data.fsr_role == 'applicant');
+      allow read: if <你原本的條件...> || isAdmin();
+      allow update: if <你原本的條件...> || isAdmin();
 ```
 
 如果你不確定原本的規則長怎樣，把你 Firestore 規則裡 `match /users/{uid} { ... }` 那一段貼給我，我幫你改好整段直接貼回去。

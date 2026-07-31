@@ -128,7 +128,7 @@ import {
   GoogleAuthProvider, signOut, sendPasswordResetEmail
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
-  getFirestore, doc, getDoc, addDoc, updateDoc, collection,
+  getFirestore, doc, getDoc, getDocs, addDoc, updateDoc, collection,
   query, where, orderBy, onSnapshot, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
@@ -144,7 +144,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-07-31.16";
+const BUILD_VERSION = "2026-07-31.17";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -514,10 +514,15 @@ async function doDispatcherCreate() {
 
 // ---- 子頁：單位帳號管理（管理者專用）----
 let applicantAccounts = [];
+let internalAccounts = [];
 let unsubAccounts = null;
+let unsubInternalAccounts = null;
+const ROLE_LABEL = { dispatcher:"承辦人", battalion_hq:"營部", company1:"一連", company2:"二連", admin:"管理者" };
+
 function renderAccountsView() {
   const c = document.getElementById("content");
   c.innerHTML = `<div class="empty">載入中…</div>`;
+
   if (unsubAccounts) unsubAccounts();
   const q = query(collection(db, "users"), where("fsr_role", "==", "applicant"));
   unsubAccounts = onSnapshot(q, (snap) => {
@@ -526,25 +531,104 @@ function renderAccountsView() {
   }, (e) => {
     c.innerHTML = `<div class="msg error">讀取失敗：${e.message}（可能是 Firestore 規則還沒開放管理者讀取 users）</div>`;
   });
+
+  if (unsubInternalAccounts) unsubInternalAccounts();
+  const q2 = query(collection(db, "users"), where("fsr_role", "in", ["dispatcher","battalion_hq","company1","company2","admin"]));
+  unsubInternalAccounts = onSnapshot(q2, (snap) => {
+    internalAccounts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    if (activeSection === "accounts") drawAccountsList();
+  });
 }
 
 function drawAccountsList() {
   const c = document.getElementById("content");
-  if (applicantAccounts.length === 0) { c.innerHTML = `<div class="empty">目前還沒有申請單位帳號</div>`; return; }
-  c.innerHTML = applicantAccounts.map(a => `
+  const internalListHtml = internalAccounts.length === 0
+    ? `<div class="empty">目前還沒有內部人員角色</div>`
+    : internalAccounts.map(a => `
+      <div class="card">
+        <h3>${escapeHtml(a.email || a.id)}</h3>
+        <div class="field" style="margin-top:10px"><label>角色</label>
+          <select id="role-${a.id}">
+            ${Object.entries(ROLE_LABEL).map(([v,l]) => `<option value="${v}" ${a.fsr_role===v?"selected":""}>${l}</option>`).join("")}
+          </select>
+        </div>
+        <div class="actions">
+          <button class="btn btn-small btn-blue" id="saverole-${a.id}">儲存角色</button>
+        </div>
+      </div>`).join("");
+
+  const applicantListHtml = applicantAccounts.length === 0
+    ? `<div class="empty">目前還沒有申請單位帳號</div>`
+    : applicantAccounts.map(a => `
+      <div class="card">
+        <h3>${escapeHtml(a.fsr_unitName || "（未設定單位名稱）")}</h3>
+        <p>Email｜${escapeHtml(a.email || "")}</p>
+        <div class="field" style="margin-top:10px"><label>單位名稱</label><input id="unitname-${a.id}" value="${escapeHtml(a.fsr_unitName || "")}"></div>
+        <div class="actions">
+          <button class="btn btn-small btn-blue" id="saveunit-${a.id}">儲存單位名稱</button>
+          <button class="btn btn-small btn-outline" id="resetpw-${a.id}">寄送重設密碼信</button>
+        </div>
+      </div>`).join("");
+
+  c.innerHTML = `
+    <div class="section-lbl">設定內部人員角色</div>
     <div class="card">
-      <h3>${escapeHtml(a.fsr_unitName || "（未設定單位名稱）")}</h3>
-      <p>Email｜${escapeHtml(a.email || "")}</p>
-      <div class="field" style="margin-top:10px"><label>單位名稱</label><input id="unitname-${a.id}" value="${escapeHtml(a.fsr_unitName || "")}"></div>
-      <div class="actions">
-        <button class="btn btn-small btn-blue" id="saveunit-${a.id}">儲存單位名稱</button>
-        <button class="btn btn-small btn-outline" id="resetpw-${a.id}">寄送重設密碼信</button>
+      <div id="setRoleMsg"></div>
+      <div class="field"><label>對方的 Email（要跟他登入 Google 用的信箱一致）</label><input id="setRoleEmail" placeholder="you@gmail.com"></div>
+      <div class="field"><label>角色</label>
+        <select id="setRoleSelect">
+          ${Object.entries(ROLE_LABEL).map(([v,l]) => `<option value="${v}">${l}</option>`).join("")}
+        </select>
       </div>
-    </div>`).join("");
+      <button class="btn btn-primary" id="setRoleBtn">查詢並設定角色</button>
+      <p style="font-size:11px;color:var(--muted);margin-top:10px">對方必須「已經登入過衛生營系統至少一次」，這個查詢才找得到他的帳號。</p>
+    </div>
+
+    <div class="section-lbl" style="margin-top:22px">已設定的內部人員</div>
+    ${internalListHtml}
+
+    <div class="section-lbl" style="margin-top:22px">申請單位帳號</div>
+    ${applicantListHtml}`;
+
+  document.getElementById("setRoleBtn").onclick = doSetInternalRole;
+  internalAccounts.forEach(a => {
+    const btn = document.getElementById(`saverole-${a.id}`);
+    if (btn) btn.onclick = () => saveInternalRole(a);
+  });
   applicantAccounts.forEach(a => {
     document.getElementById(`saveunit-${a.id}`).onclick = () => saveUnitName(a);
     document.getElementById(`resetpw-${a.id}`).onclick = () => sendResetPassword(a);
   });
+}
+
+async function doSetInternalRole() {
+  const msg = document.getElementById("setRoleMsg");
+  const email = document.getElementById("setRoleEmail").value.trim();
+  const role = document.getElementById("setRoleSelect").value;
+  if (!email) { msg.innerHTML = `<div class="msg error">請輸入 Email</div>`; return; }
+  msg.innerHTML = `<div style="font-size:11px;color:var(--muted)">查詢中…</div>`;
+  try {
+    const q = query(collection(db, "users"), where("email", "==", email));
+    const snap = await getDocs(q);
+    if (snap.empty) {
+      msg.innerHTML = `<div class="msg error">找不到這個 email 的帳號，請確認對方已經登入過衛生營系統至少一次</div>`;
+      return;
+    }
+    const targetDoc = snap.docs[0];
+    await updateDoc(doc(db, "users", targetDoc.id), { fsr_role: role });
+    msg.innerHTML = `<div class="msg ok">已將 ${escapeHtml(email)} 設定為「${ROLE_LABEL[role]}」</div>`;
+    document.getElementById("setRoleEmail").value = "";
+  } catch (e) {
+    msg.innerHTML = `<div class="msg error">設定失敗：${e.message}</div>`;
+  }
+}
+
+async function saveInternalRole(a) {
+  const val = document.getElementById(`role-${a.id}`).value;
+  try {
+    await updateDoc(doc(db, "users", a.id), { fsr_role: val });
+    alert("已更新角色");
+  } catch (e) { alert("更新失敗：" + e.message); }
 }
 
 async function saveUnitName(a) {
