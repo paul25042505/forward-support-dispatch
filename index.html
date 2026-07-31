@@ -99,7 +99,6 @@
   .tabbar{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;height:74px;background:var(--panel);border-top:1px solid var(--line);display:flex;padding-bottom:14px;z-index:10}
   .tabbar .item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:10px;color:var(--muted);cursor:pointer;background:none;border:none;font-family:inherit}
   .tabbar .item.active{color:var(--accent);font-weight:700}
-  .tabbar .ic{width:19px;height:19px;border-radius:5px;border:1.5px solid currentColor}
 
   .fab{position:fixed;right:20px;bottom:90px;width:56px;height:56px;border-radius:50%;background:var(--accent);color:var(--fab-text);border:none;font-size:28px;line-height:1;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(0,0,0,.28);z-index:12;cursor:pointer}
   .viewmode-cards{display:flex;gap:10px;margin-bottom:16px}
@@ -151,7 +150,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-07-31.21";
+const BUILD_VERSION = "2026-07-31.22";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -171,6 +170,12 @@ getRedirectResult(auth).catch((e) => {
 const COL_REQUESTS = "forward_support_requests";
 const COL_ASSIGNMENTS = "forward_support_assignments";
 const COL_UNITS = "forward_support_units";
+
+// 底部導覽列圖示（線條風格，stroke 用 currentColor 跟著 active 狀態變色）
+const ICON_HOME = `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9a1 1 0 0 0 1 1H9a1 1 0 0 0 1-1v-4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v4a1 1 0 0 0 1 1h2.5a1 1 0 0 0 1-1v-9"/></svg>`;
+const ICON_TASKS = `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1"/><path d="m8.5 12.5 2 2 4-4.5"/></svg>`;
+const ICON_RECORDS = `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>`;
+const ICON_MORE = `<svg viewBox="0 0 24 24" width="20" height="20" fill="none"><circle cx="5" cy="12" r="1.4" fill="currentColor"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/><circle cx="19" cy="12" r="1.4" fill="currentColor"/></svg>`;
 
 const UNITS_INTERNAL = ["營部", "一連", "二連"];
 const STATUS_LABEL = { pending:"待審核", assigned:"已分發", filled:"已完成", rejected:"不核准" };
@@ -327,10 +332,10 @@ function renderDispatcherShell() {
     <div class="content" id="content"></div>
     <button class="fab" id="fabCreate">+</button>
     <div class="tabbar">
-      <button class="item" data-section="home"><div class="ic"></div>首頁</button>
-      <button class="item" data-section="tasks"><div class="ic"></div>任務</button>
-      <button class="item" data-section="records"><div class="ic"></div>紀錄</button>
-      <button class="item" data-section="more"><div class="ic"></div>更多</button>
+      <button class="item" data-section="home">${ICON_HOME}首頁</button>
+      <button class="item" data-section="tasks">${ICON_TASKS}任務</button>
+      <button class="item" data-section="records">${ICON_RECORDS}紀錄</button>
+      <button class="item" data-section="more">${ICON_MORE}更多</button>
     </div>`;
   bindLogout();
   document.querySelectorAll(".tabbar [data-section]").forEach(el => el.onclick = () => { activeSection = el.dataset.section; renderDispatcherSection(); });
