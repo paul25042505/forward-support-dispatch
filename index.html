@@ -103,7 +103,7 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
-  getAuth, onAuthStateChanged, signInWithRedirect, getRedirectResult,
+  getAuth, onAuthStateChanged, signInWithPopup, signInWithRedirect, getRedirectResult,
   GoogleAuthProvider, signOut
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
@@ -153,6 +153,19 @@ let activeTab = null;
 let gateErrorText = null; // 登入被擋下時要顯示的錯誤訊息（避免 signOut 觸發的重繪把訊息蓋掉）
 
 const $app = document.getElementById("app");
+
+window.addEventListener("error", (ev) => {
+  const banner = document.createElement("div");
+  banner.style.cssText = "position:fixed;top:0;left:0;right:0;background:#d64545;color:#fff;padding:10px 14px;font-size:12px;z-index:9999;font-family:monospace";
+  banner.textContent = "程式錯誤：" + (ev.message || ev.error);
+  document.body.prepend(banner);
+});
+window.addEventListener("unhandledrejection", (ev) => {
+  const banner = document.createElement("div");
+  banner.style.cssText = "position:fixed;top:0;left:0;right:0;background:#d64545;color:#fff;padding:10px 14px;font-size:12px;z-index:9999;font-family:monospace";
+  banner.textContent = "未處理的錯誤：" + (ev.reason && (ev.reason.message || ev.reason.code) || ev.reason);
+  document.body.prepend(banner);
+});
 
 // ------------------------------------------------------------
 // Auth 狀態監聽
@@ -205,10 +218,21 @@ function renderLogin() {
 
 async function doLogin() {
   const msg = document.getElementById("authMsg");
-  msg.innerHTML = "";
+  msg.innerHTML = `<div style="font-size:11px;color:var(--muted)">開啟 Google 登入中…</div>`;
   try {
-    await signInWithRedirect(auth, googleProvider);
+    await signInWithPopup(auth, googleProvider);
   } catch (e) {
+    console.error("signInWithPopup 失敗", e);
+    // 部分瀏覽器（尤其部分 Android WebView）會擋 popup，退回用 redirect 方式
+    if (e && (e.code === "auth/popup-blocked" || e.code === "auth/operation-not-supported-in-this-environment")) {
+      try {
+        await signInWithRedirect(auth, googleProvider);
+        return;
+      } catch (e2) {
+        msg.innerHTML = `<div class="msg error">登入失敗：${authErrorText(e2)}</div>`;
+        return;
+      }
+    }
     msg.innerHTML = `<div class="msg error">登入失敗：${authErrorText(e)}</div>`;
   }
 }
