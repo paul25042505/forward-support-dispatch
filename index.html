@@ -43,7 +43,7 @@
   .tab{font-family:'JetBrains Mono';font-size:11px;padding:6px 12px;border-radius:20px;background:var(--panel2);color:var(--muted);border:1px solid var(--line);white-space:nowrap;cursor:pointer;flex-shrink:0}
   .tab.active{background:color-mix(in srgb, var(--accent) 14%, transparent);color:var(--accent);border-color:var(--accent);font-weight:700}
 
-  .content{flex:1;min-width:0;padding:16px 20px 110px;overflow-y:auto}
+  .content{flex:1;min-width:0;padding:16px 20px calc(110px + env(safe-area-inset-bottom));overflow-y:auto}
 
   .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:12px;box-shadow:var(--shadow)}
   .task-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;gap:8px}
@@ -107,13 +107,13 @@
   .cal-cell.selected{background:color-mix(in srgb, var(--accent) 16%, transparent);border-color:var(--accent)}
   .cal-cell .dot{width:5px;height:5px;border-radius:50%;background:var(--accent);margin-top:3px}
 
-  .tabbar{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:var(--app-max-width);height:74px;background:var(--panel);border-top:1px solid var(--line);display:flex;padding-bottom:14px;z-index:10}
+  .tabbar{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:var(--app-max-width);height:calc(74px + env(safe-area-inset-bottom));background:var(--panel);border-top:1px solid var(--line);display:flex;padding-bottom:calc(14px + env(safe-area-inset-bottom));z-index:10}
   .tabbar .item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:10px;color:var(--muted);cursor:pointer;background:none;border:none;font-family:inherit}
   .tabbar .item.active{color:var(--accent);font-weight:700}
 
-  .fab{position:fixed;right:20px;bottom:90px;width:56px;height:56px;border-radius:50%;background:var(--accent);color:var(--fab-text);border:none;font-size:28px;line-height:1;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(0,0,0,.28);z-index:12;cursor:pointer}
+  .fab{position:fixed;right:20px;bottom:calc(90px + env(safe-area-inset-bottom));width:56px;height:56px;border-radius:50%;background:var(--accent);color:var(--fab-text);border:none;font-size:28px;line-height:1;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(0,0,0,.28);z-index:12;cursor:pointer}
   @media (min-width:768px){ .fab{right:calc(50% - (var(--app-max-width) / 2) + 20px)} }
-  .viewmode-cards{display:flex;gap:10px;margin-bottom:16px}
+  .viewmode-cards{display:flex;gap:10px;position:sticky;top:0;z-index:5;background:var(--bg);margin:-16px -20px 16px;padding:16px 20px 10px}
   .viewmode-card{width:76px;height:76px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:14px;cursor:pointer;font-size:12px;font-weight:600;color:var(--muted)}
   .viewmode-card.active{background:color-mix(in srgb, var(--accent) 14%, transparent);border-color:var(--accent);color:var(--accent)}
   .back-link{display:inline-block;font-family:'JetBrains Mono';font-size:10.5px;color:var(--muted);border:1px solid var(--line);background:var(--panel2);padding:6px 12px;border-radius:20px;cursor:pointer;margin-bottom:14px}
@@ -181,7 +181,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-07-31.30";
+const BUILD_VERSION = "2026-07-31.31";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -1010,6 +1010,7 @@ function bindCardMenu(containerEl) {
 }
 
 function openTaskActionSheet(taskId) {
+  closeSheet();
   const r = allRequests.find(x => x.id === taskId);
   if (!r) return;
   const canDelete = r.createdByDispatcher === true;
