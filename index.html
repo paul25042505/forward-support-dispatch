@@ -104,7 +104,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getAuth, onAuthStateChanged, signInWithPopup, signInWithRedirect, getRedirectResult,
-  GoogleAuthProvider, signOut
+  GoogleAuthProvider, signOut, sendPasswordResetEmail
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   getFirestore, doc, getDoc, addDoc, updateDoc, collection,
@@ -123,7 +123,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-07-31.7";
+const BUILD_VERSION = "2026-07-31.8";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -282,30 +282,51 @@ function bindLogout(){ document.getElementById("logoutBtn").onclick = () => sign
 // ==============================================================
 // 承辦人 / 管理者
 // ==============================================================
+let activeSection = "tasks"; // tasks | create | accounts（承辦人/管理者用）
+
 function renderDispatcherShell() {
+  activeSection = "tasks";
+  const isAdmin = profile.fsr_role === "admin";
   $app.innerHTML = `
-    ${topbarHtml("前支任務指揮台", "承辦人 ・ " + (profile.email || ""))}
-    <div class="tabs">
+    ${topbarHtml("前支任務指揮台", (isAdmin ? "管理者" : "承辦人") + " ・ " + (profile.email || ""))}
+    <div class="content" id="content"></div>
+    <div class="tabbar">
+      <button class="item" data-section="tasks"><div class="ic"></div>任務</button>
+      <button class="item" data-section="create"><div class="ic"></div>新增任務</button>
+      ${isAdmin ? `<button class="item" data-section="accounts"><div class="ic"></div>單位帳號</button>` : ""}
+    </div>`;
+  bindLogout();
+  document.querySelectorAll(".tabbar [data-section]").forEach(el => el.onclick = () => { activeSection = el.dataset.section; renderDispatcherSection(); });
+  renderDispatcherSection();
+}
+
+function renderDispatcherSection() {
+  document.querySelectorAll(".tabbar .item[data-section]").forEach(el => el.classList.toggle("active", el.dataset.section === activeSection));
+  if (activeSection === "tasks") renderDispatcherTasksView();
+  else if (activeSection === "create") renderDispatcherCreateView();
+  else if (activeSection === "accounts") renderAccountsView();
+}
+
+// ---- 子頁：任務清單（含狀態篩選）----
+function renderDispatcherTasksView() {
+  const c = document.getElementById("content");
+  c.innerHTML = `
+    <div class="tabs" style="margin:-16px -20px 16px;padding:12px 20px">
       <div class="tab" data-tab="pending">待審核</div>
       <div class="tab" data-tab="assigned">已分發</div>
       <div class="tab" data-tab="filled">已完成</div>
       <div class="tab" data-tab="all">全部</div>
     </div>
-    <div class="content" id="content"></div>
-    <div class="tabbar">
-      <button class="item" data-tab="pending"><div class="ic"></div>待審核</button>
-      <button class="item" data-tab="assigned"><div class="ic"></div>已分發</button>
-      <button class="item" data-tab="filled"><div class="ic"></div>已完成</button>
-      <button class="item" data-tab="all"><div class="ic"></div>全部</button>
-    </div>`;
-  bindLogout();
-  document.querySelectorAll("[data-tab]").forEach(el => el.onclick = () => { activeTab = el.dataset.tab; renderDispatcherContent(); });
+    <div id="taskListArea"></div>`;
+  document.querySelectorAll(".tabs [data-tab]").forEach(el => el.onclick = () => { activeTab = el.dataset.tab; renderDispatcherContent(); });
+  if (!activeTab || !["pending","assigned","filled","all"].includes(activeTab)) activeTab = "pending";
   renderDispatcherContent();
 }
 
 function renderDispatcherContent() {
-  document.querySelectorAll(".tab,.tabbar .item").forEach(el => el.classList.toggle("active", el.dataset.tab === activeTab));
-  const c = document.getElementById("content");
+  document.querySelectorAll(".tabs .tab").forEach(el => el.classList.toggle("active", el.dataset.tab === activeTab));
+  const area = document.getElementById("taskListArea");
+  if (!area) return;
   const counts = {
     pending: allRequests.filter(r=>r.status==="pending").length,
     assigned: allRequests.filter(r=>r.status==="assigned").length,
@@ -319,14 +340,133 @@ function renderDispatcherContent() {
     </div>`;
   let list = allRequests;
   if (activeTab !== "all") list = allRequests.filter(r => r.status === activeTab);
-  if (list.length === 0) { c.innerHTML = statsHtml + `<div class="empty">這個分類目前沒有任務</div>`; return; }
-  c.innerHTML = statsHtml + list.map(r => taskCardHtml(r, true)).join("");
+  if (list.length === 0) { area.innerHTML = statsHtml + `<div class="empty">這個分類目前沒有任務</div>`; return; }
+  area.innerHTML = statsHtml + list.map(r => taskCardHtml(r, true)).join("");
   list.forEach(r => {
     const assignBtn = document.getElementById(`assign-${r.id}`);
     if (assignBtn) assignBtn.onclick = () => openAssignPrompt(r);
     const rejectBtn = document.getElementById(`reject-${r.id}`);
     if (rejectBtn) rejectBtn.onclick = () => rejectRequest(r);
   });
+}
+
+// ---- 子頁：手動新增任務（承辦人代外部單位登記，或用於電話通報的任務）----
+function renderDispatcherCreateView() {
+  const c = document.getElementById("content");
+  c.innerHTML = `
+    <div id="createMsg"></div>
+    <div class="field"><label>申請單位</label><input id="cUnit" placeholder="例：台中市消防局大甲分隊"></div>
+    <div class="row2">
+      <div class="field"><label>申請人級職</label><input id="cRank" placeholder="例：分隊長"></div>
+      <div class="field"><label>申請人姓名</label><input id="cName" placeholder="例：陳○○"></div>
+    </div>
+    <div class="field"><label>任務地點</label><input id="cLoc" placeholder="請輸入地點"></div>
+    <div class="row2">
+      <div class="field"><label>開始時間</label><input id="cStart" type="datetime-local"></div>
+      <div class="field"><label>結束時間</label><input id="cEnd" type="datetime-local"></div>
+    </div>
+    <div class="field"><label>備註（選填）</label><textarea id="cRemarks"></textarea></div>
+    <div class="field"><label>直接分發給（選填，不選則先進待審核）</label>
+      <select id="cAssign">
+        <option value="">不分發，先待審核</option>
+        <option value="營部">營部</option>
+        <option value="一連">一連</option>
+        <option value="二連">二連</option>
+      </select>
+    </div>
+    <button class="btn btn-primary" id="createBtn">送出任務</button>`;
+  document.getElementById("createBtn").onclick = doDispatcherCreate;
+}
+
+async function doDispatcherCreate() {
+  const msg = document.getElementById("createMsg");
+  const unit = document.getElementById("cUnit").value.trim();
+  const rank = document.getElementById("cRank").value.trim();
+  const name = document.getElementById("cName").value.trim();
+  const loc = document.getElementById("cLoc").value.trim();
+  const start = document.getElementById("cStart").value;
+  const end = document.getElementById("cEnd").value;
+  const remarks = document.getElementById("cRemarks").value.trim();
+  const assign = document.getElementById("cAssign").value;
+  if (!unit || !rank || !name || !loc || !start || !end) {
+    msg.innerHTML = `<div class="msg error">請完整填寫必填欄位</div>`; return;
+  }
+  try {
+    const startTs = new Date(start);
+    const endTs = new Date(end);
+    await addDoc(collection(db, COL_REQUESTS), {
+      applicantUnit: unit, applicantRank: rank, applicantName: name,
+      location: loc,
+      taskStartTime: startTs,
+      taskEndTime: endTs,
+      remarks,
+      status: assign ? "assigned" : "pending",
+      assignedUnit: assign || null,
+      createdAt: serverTimestamp(),
+      createdBy: currentUser.uid,
+      createdByDispatcher: true,
+      reviewedBy: assign ? currentUser.uid : null,
+      reviewedAt: assign ? serverTimestamp() : null,
+    });
+    msg.innerHTML = `<div class="msg ok">任務已建立</div>`;
+    ["cUnit","cRank","cName","cLoc","cStart","cEnd","cRemarks"].forEach(id => document.getElementById(id).value = "");
+    document.getElementById("cAssign").value = "";
+  } catch (e) {
+    msg.innerHTML = `<div class="msg error">建立失敗：${e.message}</div>`;
+  }
+}
+
+// ---- 子頁：單位帳號管理（管理者專用）----
+let applicantAccounts = [];
+let unsubAccounts = null;
+function renderAccountsView() {
+  const c = document.getElementById("content");
+  c.innerHTML = `<div class="empty">載入中…</div>`;
+  if (unsubAccounts) unsubAccounts();
+  const q = query(collection(db, "users"), where("fsr_role", "==", "applicant"));
+  unsubAccounts = onSnapshot(q, (snap) => {
+    applicantAccounts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    if (activeSection === "accounts") drawAccountsList();
+  }, (e) => {
+    c.innerHTML = `<div class="msg error">讀取失敗：${e.message}（可能是 Firestore 規則還沒開放管理者讀取 users）</div>`;
+  });
+}
+
+function drawAccountsList() {
+  const c = document.getElementById("content");
+  if (applicantAccounts.length === 0) { c.innerHTML = `<div class="empty">目前還沒有申請單位帳號</div>`; return; }
+  c.innerHTML = applicantAccounts.map(a => `
+    <div class="card">
+      <h3>${escapeHtml(a.fsr_unitName || "（未設定單位名稱）")}</h3>
+      <p>Email｜${escapeHtml(a.email || "")}</p>
+      <div class="field" style="margin-top:10px"><label>單位名稱</label><input id="unitname-${a.id}" value="${escapeHtml(a.fsr_unitName || "")}"></div>
+      <div class="actions">
+        <button class="btn btn-small btn-blue" id="saveunit-${a.id}">儲存單位名稱</button>
+        <button class="btn btn-small btn-outline" id="resetpw-${a.id}">寄送重設密碼信</button>
+      </div>
+    </div>`).join("");
+  applicantAccounts.forEach(a => {
+    document.getElementById(`saveunit-${a.id}`).onclick = () => saveUnitName(a);
+    document.getElementById(`resetpw-${a.id}`).onclick = () => sendResetPassword(a);
+  });
+}
+
+async function saveUnitName(a) {
+  const val = document.getElementById(`unitname-${a.id}`).value.trim();
+  if (!val) { alert("單位名稱不能空白"); return; }
+  try {
+    await updateDoc(doc(db, "users", a.id), { fsr_unitName: val });
+    alert("已更新單位名稱");
+  } catch (e) { alert("更新失敗：" + e.message); }
+}
+
+async function sendResetPassword(a) {
+  if (!a.email) { alert("這個帳號沒有 email，無法寄送"); return; }
+  if (!confirm(`確定要寄送密碼重設信到 ${a.email} 嗎？`)) return;
+  try {
+    await sendPasswordResetEmail(auth, a.email);
+    alert("已寄送重設密碼信");
+  } catch (e) { alert("寄送失敗：" + e.message); }
 }
 
 async function openAssignPrompt(r) {
@@ -353,7 +493,7 @@ function watchRequestsForDispatcher() {
   const q = query(collection(db, COL_REQUESTS), orderBy("createdAt", "desc"));
   unsubRequests = onSnapshot(q, (snap) => {
     allRequests = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    renderDispatcherContent();
+    if (activeSection === "tasks") renderDispatcherContent();
   });
 }
 
@@ -368,18 +508,15 @@ function renderUnitShell() {
       <div class="tab" data-tab="assigned">待填寫</div>
       <div class="tab" data-tab="filled">已完成</div>
     </div>
-    <div class="content" id="content"></div>
-    <div class="tabbar">
-      <button class="item" data-tab="assigned"><div class="ic"></div>待填寫</button>
-      <button class="item" data-tab="filled"><div class="ic"></div>已完成</button>
-    </div>`;
+    <div class="content" id="content" style="padding-bottom:24px"></div>`;
   bindLogout();
-  document.querySelectorAll("[data-tab]").forEach(el => el.onclick = () => { activeTab = el.dataset.tab; renderUnitContent(); });
+  document.querySelectorAll(".tabs [data-tab]").forEach(el => el.onclick = () => { activeTab = el.dataset.tab; renderUnitContent(); });
+  if (!activeTab || !["assigned","filled"].includes(activeTab)) activeTab = "assigned";
   renderUnitContent();
 }
 
 function renderUnitContent() {
-  document.querySelectorAll(".tab,.tabbar .item").forEach(el => el.classList.toggle("active", el.dataset.tab === activeTab));
+  document.querySelectorAll(".tabs .tab").forEach(el => el.classList.toggle("active", el.dataset.tab === activeTab));
   const c = document.getElementById("content");
   const list = allRequests.filter(r => r.status === activeTab);
   if (list.length === 0) { c.innerHTML = `<div class="empty">目前沒有任務</div>`; return; }
