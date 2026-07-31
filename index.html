@@ -123,7 +123,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-07-31.6";
+const BUILD_VERSION = "2026-07-31.7";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -192,7 +192,12 @@ onAuthStateChanged(auth, async (user) => {
     return;
   }
   profile = snap.data();
-  if (profile.fsr_role === "applicant" || !profile.fsr_role) {
+  if (!profile.fsr_role) {
+    gateErrorText = "這個 Google 帳號還沒被設定 fsr_role，請到 Firestore 的 users 文件加上角色欄位（dispatcher／battalion_hq／company1／company2／admin）";
+    await signOut(auth);
+    return;
+  }
+  if (profile.fsr_role === "applicant") {
     gateErrorText = "此帳號為申請單位帳號，請至申請人站登入";
     await signOut(auth);
     return;
