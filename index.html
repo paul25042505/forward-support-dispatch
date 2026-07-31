@@ -128,9 +128,13 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const googleProvider = new GoogleAuthProvider();
 
-// 處理 Google signInWithRedirect 回跳後的結果（登入失敗時顯示錯誤訊息）
+// 處理 Google signInWithRedirect 回跳後的結果；失敗時記錄下來，登入頁渲染時顯示給使用者看
 getRedirectResult(auth).catch((e) => {
   console.error("Google 登入失敗", e);
+  gateErrorText = `Google 登入失敗（${e.code || e.message}）`;
+  if (document.getElementById("authMsg")) {
+    document.getElementById("authMsg").innerHTML = `<div class="msg error">${gateErrorText}</div>`;
+  }
 });
 
 // 本系統獨立 collection（避免與衛生營原系統資料衝突）
@@ -146,6 +150,7 @@ let profile = null;       // Firestore users/{uid} 文件內容
 let allRequests = [];     // 目前使用者可見的任務快取
 let unsubRequests = null;
 let activeTab = null;
+let gateErrorText = null; // 登入被擋下時要顯示的錯誤訊息（避免 signOut 觸發的重繪把訊息蓋掉）
 
 const $app = document.getElementById("app");
 
@@ -157,26 +162,27 @@ onAuthStateChanged(auth, async (user) => {
   currentUser = user;
   if (!user) { profile = null; renderLogin(); return; }
 
-  const snap = await getDoc(doc(db, "users", user.uid));
-  if (!snap.exists()) {
+  let snap;
+  try {
+    snap = await getDoc(doc(db, "users", user.uid));
+  } catch (e) {
+    gateErrorText = `讀取帳號資料失敗：${e.code || e.message}（可能是 Firestore 規則還沒設定好）`;
     await signOut(auth);
-    renderLogin();
-    setTimeout(() => {
-      const msg = document.getElementById("authMsg");
-      if (msg) msg.innerHTML = `<div class="msg error">找不到此帳號的角色設定，請聯絡管理者</div>`;
-    }, 0);
+    return; // signOut 會觸發 onAuthStateChanged(null)，由那次呼叫負責畫面重繪
+  }
+
+  if (!snap.exists()) {
+    gateErrorText = "找不到此帳號的角色設定，請聯絡管理者加上 fsr_role 欄位";
+    await signOut(auth);
     return;
   }
   profile = snap.data();
   if (profile.fsr_role === "applicant" || !profile.fsr_role) {
+    gateErrorText = "此帳號為申請單位帳號，請至申請人站登入";
     await signOut(auth);
-    renderLogin();
-    setTimeout(() => {
-      const msg = document.getElementById("authMsg");
-      if (msg) msg.innerHTML = `<div class="msg error">此帳號為申請單位帳號，請至申請人站登入</div>`;
-    }, 0);
     return;
   }
+  gateErrorText = null;
   bootRoleApp();
 });
 
@@ -189,10 +195,11 @@ function renderLogin() {
       <div class="brand-mark"><span>前</span></div>
       <h1>前支任務指揮台</h1>
       <p class="sub">FORWARD SUPPORT DISPATCH ・ 衛生營內部人員專用</p>
-      <div id="authMsg"></div>
+      <div id="authMsg">${gateErrorText ? `<div class="msg error">${gateErrorText}</div>` : ""}</div>
       <button class="btn btn-primary" id="googleLoginBtn">使用 Google 帳號登入</button>
       <p style="font-size:11px;color:var(--muted);margin-top:14px;text-align:center">請使用你在衛生營系統原本綁定的 Google 帳號登入</p>
     </div>`;
+  gateErrorText = null;
   document.getElementById("googleLoginBtn").onclick = doLogin;
 }
 
