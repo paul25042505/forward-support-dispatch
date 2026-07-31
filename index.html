@@ -111,7 +111,8 @@
   .tabbar .item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:10px;color:var(--muted);cursor:pointer;background:none;border:none;font-family:inherit}
   .tabbar .item.active{color:var(--accent);font-weight:700}
 
-  .fab{position:absolute;right:20px;bottom:90px;width:56px;height:56px;border-radius:50%;background:var(--accent);color:var(--fab-text);border:none;font-size:28px;line-height:1;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(0,0,0,.28);z-index:12;cursor:pointer}
+  .fab{position:fixed;right:20px;bottom:90px;width:56px;height:56px;border-radius:50%;background:var(--accent);color:var(--fab-text);border:none;font-size:28px;line-height:1;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(0,0,0,.28);z-index:12;cursor:pointer}
+  @media (min-width:768px){ .fab{right:calc(50% - (var(--app-max-width) / 2) + 20px)} }
   .viewmode-cards{display:flex;gap:10px;margin-bottom:16px}
   .viewmode-card{width:76px;height:76px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:14px;cursor:pointer;font-size:12px;font-weight:600;color:var(--muted)}
   .viewmode-card.active{background:color-mix(in srgb, var(--accent) 14%, transparent);border-color:var(--accent);color:var(--accent)}
@@ -179,7 +180,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-07-31.26";
+const BUILD_VERSION = "2026-07-31.27";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -391,7 +392,7 @@ function renderDispatcherShell() {
 
 function renderDispatcherSection() {
   document.querySelectorAll(".tabbar .item[data-section]").forEach(el => el.classList.toggle("active", el.dataset.section === activeSection));
-  document.getElementById("fabCreate").style.display = (activeSection === "home" || activeSection === "tasks") ? "flex" : "none";
+  document.getElementById("fabCreate").style.display = (activeSection === "tasks") ? "flex" : "none";
   if (activeSection === "home") renderHomeView();
   else if (activeSection === "tasks") renderDispatcherTasksView();
   else if (activeSection === "records") renderRecordsView();
