@@ -123,6 +123,8 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
+const BUILD_VERSION = "2026-07-31.6";
+
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
@@ -211,6 +213,7 @@ function renderLogin() {
       <div id="authMsg">${gateErrorText ? `<div class="msg error">${gateErrorText}</div>` : ""}</div>
       <button class="btn btn-primary" id="googleLoginBtn">使用 Google 帳號登入</button>
       <p style="font-size:11px;color:var(--muted);margin-top:14px;text-align:center">請使用你在衛生營系統原本綁定的 Google 帳號登入</p>
+      <p style="font-size:10px;color:var(--muted);margin-top:30px;text-align:center;font-family:'JetBrains Mono'">build ${BUILD_VERSION}</p>
     </div>`;
   gateErrorText = null;
   document.getElementById("googleLoginBtn").onclick = doLogin;
@@ -261,7 +264,7 @@ function topbarHtml(title, sub) {
     <div class="topbar">
       <div class="row">
         <div>
-          <div class="eyebrow">FORWARD SUPPORT</div>
+          <div class="eyebrow">FORWARD SUPPORT ・ build ${BUILD_VERSION}</div>
           <h1>${title}</h1>
           <p>${sub}</p>
         </div>
