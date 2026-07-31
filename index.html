@@ -83,6 +83,14 @@
   .stat .l{font-size:10px;color:var(--muted);margin-top:2px}
   .stat.amber .n{color:var(--amber)} .stat.blue .n{color:var(--blue)} .stat.green .n{color:var(--green)}
 
+  .status-cards{display:flex;gap:8px;margin-bottom:16px}
+  .status-card{flex:1;min-width:0;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:11px 4px;text-align:center;cursor:pointer}
+  .status-card .n{font-family:'JetBrains Mono';font-size:19px;font-weight:700}
+  .status-card .l{font-size:10px;color:var(--muted);margin-top:2px}
+  .status-card.amber .n{color:var(--amber)} .status-card.blue .n{color:var(--blue)} .status-card.green .n{color:var(--green)} .status-card.gray .n{color:var(--text)}
+  .status-card.active{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+  .status-card.active .l{color:var(--accent);font-weight:700}
+
   /* ---------- 行事曆 ---------- */
   .cal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
   .cal-title{font-family:'Chakra Petch';font-weight:700;font-size:15px}
@@ -149,7 +157,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-07-31.23";
+const BUILD_VERSION = "2026-07-31.24";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -412,24 +420,15 @@ function renderDispatcherTasksView() {
   renderTaskListSubview();
 }
 
-// ---- 子頁：任務清單（含狀態篩選）----
+// ---- 子頁：任務清單（狀態卡片兼篩選）----
 function renderTaskListSubview() {
   const area = document.getElementById("taskViewArea");
-  area.innerHTML = `
-    <div class="tabs" style="margin:0 -20px 16px;padding:12px 20px">
-      <div class="tab" data-tab="pending">待審核</div>
-      <div class="tab" data-tab="assigned">已分發</div>
-      <div class="tab" data-tab="filled">已完成</div>
-      <div class="tab" data-tab="all">全部</div>
-    </div>
-    <div id="taskListArea"></div>`;
-  document.querySelectorAll("#taskViewArea .tabs [data-tab]").forEach(el => el.onclick = () => { activeTab = el.dataset.tab; renderDispatcherContent(); });
+  area.innerHTML = `<div id="taskListArea"></div>`;
   if (!activeTab || !["pending","assigned","filled","all"].includes(activeTab)) activeTab = "pending";
   renderDispatcherContent();
 }
 
 function renderDispatcherContent() {
-  document.querySelectorAll("#taskViewArea .tabs .tab").forEach(el => el.classList.toggle("active", el.dataset.tab === activeTab));
   const area = document.getElementById("taskListArea");
   if (!area) return;
   const counts = {
@@ -437,16 +436,20 @@ function renderDispatcherContent() {
     assigned: allRequests.filter(r=>r.status==="assigned").length,
     filled: allRequests.filter(r=>r.status==="filled").length,
   };
+  const statCards = [
+    { key:"pending", cls:"amber", label:"待審核", n:counts.pending },
+    { key:"assigned", cls:"blue", label:"已分發", n:counts.assigned },
+    { key:"filled", cls:"green", label:"已完成", n:counts.filled },
+    { key:"all", cls:"gray", label:"全部", n:allRequests.length },
+  ];
   const statsHtml = `
-    <div class="stats">
-      <div class="stat amber"><div class="n">${counts.pending}</div><div class="l">待審核</div></div>
-      <div class="stat blue"><div class="n">${counts.assigned}</div><div class="l">已分發</div></div>
-      <div class="stat green"><div class="n">${counts.filled}</div><div class="l">已完成</div></div>
+    <div class="status-cards">
+      ${statCards.map(s => `<div class="status-card ${s.cls}${activeTab===s.key?" active":""}" data-tab="${s.key}"><div class="n">${s.n}</div><div class="l">${s.label}</div></div>`).join("")}
     </div>`;
   let list = allRequests;
   if (activeTab !== "all") list = allRequests.filter(r => r.status === activeTab);
-  if (list.length === 0) { area.innerHTML = statsHtml + `<div class="empty">這個分類目前沒有任務</div>`; return; }
-  area.innerHTML = statsHtml + list.map(r => taskCardHtml(r, true)).join("");
+  area.innerHTML = statsHtml + (list.length === 0 ? `<div class="empty">這個分類目前沒有任務</div>` : list.map(r => taskCardHtml(r, true)).join(""));
+  document.querySelectorAll("#taskListArea .status-card").forEach(el => el.onclick = () => { activeTab = el.dataset.tab; renderDispatcherContent(); });
   list.forEach(r => {
     const assignBtn = document.getElementById(`assign-${r.id}`);
     if (assignBtn) assignBtn.onclick = () => openAssignPrompt(r);
