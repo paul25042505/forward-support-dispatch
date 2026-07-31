@@ -88,8 +88,8 @@
   .cal-title{font-family:'Chakra Petch';font-weight:700;font-size:15px}
   .cal-nav{background:var(--panel2);border:1px solid var(--line);color:var(--text);width:32px;height:32px;border-radius:8px;font-size:16px;cursor:pointer}
   .cal-weekdays{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));text-align:center;font-size:10.5px;color:var(--muted);margin-bottom:6px;font-family:'JetBrains Mono'}
-  .cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;width:100%}
-  .cal-cell{width:100%;aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:8px;cursor:pointer;background:var(--panel);border:1px solid var(--line);min-width:0}
+  .cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));grid-auto-rows:42px;gap:4px;width:100%}
+  .cal-cell{width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:8px;cursor:pointer;background:var(--panel);border:1px solid var(--line);min-width:0}
   .cal-cell.empty{visibility:hidden;cursor:default}
   .cal-cell .daynum{font-size:12.5px}
   .cal-cell.today{border-color:var(--accent);color:var(--accent);font-weight:700}
@@ -144,7 +144,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-07-31.15";
+const BUILD_VERSION = "2026-07-31.16";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
