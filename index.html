@@ -24,7 +24,7 @@
   @media (min-width:768px){ :root{ --app-max-width:640px; --page-bg:var(--panel2); } }
   @media (min-width:1200px){ :root{ --app-max-width:760px; } }
   *{box-sizing:border-box}
-  html,body{margin:0;height:100%;background:var(--page-bg);color:var(--text);font-family:'Noto Sans TC',sans-serif;-webkit-tap-highlight-color:transparent;-webkit-text-size-adjust:100%;text-size-adjust:100%;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:manipulation}
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--page-bg);color:var(--text);font-family:'Noto Sans TC',sans-serif;-webkit-tap-highlight-color:transparent;-webkit-text-size-adjust:100%;text-size-adjust:100%;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:manipulation}
   input,textarea{-webkit-user-select:text;user-select:text}
   #app{max-width:var(--app-max-width);margin:0 auto;min-height:100vh;display:flex;flex-direction:column;position:relative;background:var(--bg);overflow-x:hidden}
   @media (min-width:768px){ #app{box-shadow:0 0 0 1px var(--line);min-height:100vh} }
@@ -180,7 +180,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-07-31.27";
+const BUILD_VERSION = "2026-07-31.28";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -627,8 +627,8 @@ function renderDispatcherCreateView() {
     <div id="createMsg"></div>
     <div class="field"><label>申請單位</label><input id="cUnit" placeholder="例：台中市消防局大甲分隊"></div>
     <div class="row2">
-      <div class="field"><label>申請人級職</label><input id="cRank" placeholder="例：分隊長"></div>
-      <div class="field"><label>申請人姓名</label><input id="cName" placeholder="例：陳○○"></div>
+      <div class="field"><label>申請人級職（選填）</label><input id="cRank" placeholder="例：分隊長"></div>
+      <div class="field"><label>申請人姓名（選填）</label><input id="cName" placeholder="例：陳○○"></div>
     </div>
     <div class="field"><label>任務地點</label><input id="cLoc" placeholder="請輸入地點"></div>
     <div class="field"><label>開始時間</label><input id="cStart" type="datetime-local"></div>
@@ -659,7 +659,7 @@ async function doDispatcherCreate() {
   const end = document.getElementById("cEnd").value;
   const remarks = document.getElementById("cRemarks").value.trim();
   const assign = document.getElementById("cAssign").value;
-  if (!unit || !rank || !name || !loc || !start || !end) {
+  if (!unit || !loc || !start || !end) {
     msg.innerHTML = `<div class="msg error">請完整填寫必填欄位</div>`; return;
   }
   try {
@@ -706,8 +706,8 @@ function renderEditTaskView(r) {
     <div id="editMsg"></div>
     <div class="field"><label>申請單位</label><input id="eUnit" value="${escapeHtml(r.applicantUnit || "")}"></div>
     <div class="row2">
-      <div class="field"><label>申請人級職</label><input id="eRank" value="${escapeHtml(r.applicantRank || "")}"></div>
-      <div class="field"><label>申請人姓名</label><input id="eName" value="${escapeHtml(r.applicantName || "")}"></div>
+      <div class="field"><label>申請人級職（選填）</label><input id="eRank" value="${escapeHtml(r.applicantRank || "")}"></div>
+      <div class="field"><label>申請人姓名（選填）</label><input id="eName" value="${escapeHtml(r.applicantName || "")}"></div>
     </div>
     <div class="field"><label>任務地點</label><input id="eLoc" value="${escapeHtml(r.location || "")}"></div>
     <div class="field"><label>開始時間</label><input id="eStart" type="datetime-local" value="${startVal}"></div>
@@ -729,7 +729,7 @@ async function doSaveEdit(taskId) {
   const start = document.getElementById("eStart").value;
   const end = document.getElementById("eEnd").value;
   const remarks = document.getElementById("eRemarks").value.trim();
-  if (!unit || !rank || !name || !loc || !start || !end) {
+  if (!unit || !loc || !start || !end) {
     msg.innerHTML = `<div class="msg error">請完整填寫必填欄位</div>`; return;
   }
   try {
@@ -1243,7 +1243,7 @@ function taskCardHtml(r, withDispatchActions=false, withFillAction=false) {
       ${r.tagName ? `<div class="tag-chip" style="--tag-color:${escapeHtml(r.tagColor || "")}">${escapeHtml(r.tagName)}</div>` : ""}
       <h3>${escapeHtml(r.location || "")}</h3>
       <p>申請單位｜${escapeHtml(r.applicantUnit || "")}</p>
-      <p>申請人｜${escapeHtml(r.applicantRank || "")} ${escapeHtml(r.applicantName || "")}</p>
+      ${(r.applicantRank || r.applicantName) ? `<p>申請人｜${escapeHtml(r.applicantRank || "")} ${escapeHtml(r.applicantName || "")}</p>` : ""}
       ${r.remarks ? `<p>備註｜${escapeHtml(r.remarks)}</p>` : ""}
       <div class="time">${start} — ${end}</div>
       ${actions}
