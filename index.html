@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>前支任務指揮台 - 內部人員專用</title>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Noto+Sans+TC:wght@400;500;700;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#f2f4f8; --panel:#ffffff; --panel2:#eef1f7; --line:#dce1eb;
+    --text:#171b26; --muted:#6b7488; --accent:#d9631f; --blue:#2f6fe0;
+    --green:#1f9d5c; --amber:#c98a0e; --red:#d64545; --shadow:0 1px 3px rgba(20,25,40,.05);
+    --fab-text:#fff;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#0c1220; --panel:#131b2e; --panel2:#182238; --line:#26314a;
+      --text:#e7ecf6; --muted:#7e8aa8; --accent:#ff8c42; --blue:#4f8bff;
+      --green:#3ddc84; --amber:#ffcf5c; --red:#ff5a5a; --shadow:none;
+      --fab-text:#111;
+    }
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-serif;-webkit-tap-highlight-color:transparent}
+  #app{max-width:480px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column;position:relative;background:var(--bg)}
+  input,select,textarea,button{font-family:inherit}
+  a{color:inherit}
+
+  /* ---------- 共用元件 ---------- */
+  .topbar{padding:16px 20px 12px;background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:10}
+  .eyebrow{font-family:'JetBrains Mono';font-size:10px;color:var(--accent);letter-spacing:.15em;margin-bottom:4px;font-weight:700}
+  .topbar h1{font-family:'Chakra Petch';font-size:18px;margin:0;font-weight:700}
+  .topbar p{margin:4px 0 0;font-size:11.5px;color:var(--muted)}
+  .topbar .row{display:flex;justify-content:space-between;align-items:flex-start}
+  .btn-logout{font-family:'JetBrains Mono';font-size:10.5px;color:var(--muted);border:1px solid var(--line);background:var(--panel2);padding:6px 10px;border-radius:20px;cursor:pointer}
+
+  .tabs{display:flex;gap:6px;padding:12px 20px;overflow-x:auto;background:var(--panel);border-bottom:1px solid var(--line)}
+  .tab{font-family:'JetBrains Mono';font-size:11px;padding:6px 12px;border-radius:20px;background:var(--panel2);color:var(--muted);border:1px solid var(--line);white-space:nowrap;cursor:pointer;flex-shrink:0}
+  .tab.active{background:color-mix(in srgb, var(--accent) 14%, transparent);color:var(--accent);border-color:var(--accent);font-weight:700}
+
+  .content{flex:1;padding:16px 20px 110px;overflow-y:auto}
+
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:12px;box-shadow:var(--shadow)}
+  .task-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;gap:8px}
+  .id{font-family:'JetBrains Mono';font-size:10.5px;color:var(--muted)}
+  .tag{font-family:'JetBrains Mono';font-size:10px;padding:3px 8px;border-radius:3px;display:inline-flex;align-items:center;gap:4px;font-weight:600;white-space:nowrap}
+  .tag.pending{background:color-mix(in srgb, var(--amber) 14%, transparent);color:var(--amber)}
+  .tag.assigned{background:color-mix(in srgb, var(--blue) 14%, transparent);color:var(--blue)}
+  .tag.filled{background:color-mix(in srgb, var(--green) 14%, transparent);color:var(--green)}
+  .tag.rejected{background:color-mix(in srgb, var(--red) 14%, transparent);color:var(--red)}
+  .tag::before{content:'';width:5px;height:5px;border-radius:50%;background:currentColor}
+  .card h3{font-size:15px;margin:0 0 6px;font-weight:700}
+  .card p{font-size:12.5px;color:var(--muted);margin:2px 0}
+  .card .time{font-family:'JetBrains Mono';font-size:11.5px;color:var(--text);margin-top:8px;padding-top:8px;border-top:1px solid var(--line)}
+  .card .actions{display:flex;gap:8px;margin-top:10px}
+
+  .field{margin-bottom:14px}
+  .field label{display:block;font-family:'JetBrains Mono';font-size:10.5px;color:var(--muted);letter-spacing:.06em;margin-bottom:6px}
+  .field input, .field select, .field textarea{width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:11px 12px;font-size:13.5px;color:var(--text)}
+  .field textarea{resize:vertical;min-height:64px}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+
+  .btn{display:block;width:100%;text-align:center;padding:13px;border-radius:10px;font-weight:700;font-size:13.5px;border:none;cursor:pointer}
+  .btn-primary{background:var(--accent);color:var(--fab-text)}
+  .btn-outline{background:transparent;border:1px solid var(--line);color:var(--text)}
+  .btn-small{padding:8px 12px;font-size:11.5px;border-radius:8px;flex:1}
+  .btn-green{background:var(--green);color:#06251a}
+  .btn-red{background:var(--red);color:#2a0808}
+  .btn-blue{background:var(--blue);color:#fff}
+
+  .section-lbl{font-family:'JetBrains Mono';font-size:10px;color:var(--accent);letter-spacing:.15em;margin:18px 0 10px;font-weight:700}
+  .empty{text-align:center;color:var(--muted);font-size:12.5px;padding:40px 20px}
+  .msg{font-size:12px;padding:10px 12px;border-radius:8px;margin-bottom:12px}
+  .msg.error{background:color-mix(in srgb, var(--red) 14%, transparent);color:var(--red)}
+  .msg.ok{background:color-mix(in srgb, var(--green) 14%, transparent);color:var(--green)}
+
+  .stats{display:flex;gap:10px;margin-bottom:16px;overflow-x:auto}
+  .stat{flex-shrink:0;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:11px 16px;min-width:78px}
+  .stat .n{font-family:'JetBrains Mono';font-size:20px;font-weight:700}
+  .stat .l{font-size:10px;color:var(--muted);margin-top:2px}
+  .stat.amber .n{color:var(--amber)} .stat.blue .n{color:var(--blue)} .stat.green .n{color:var(--green)}
+
+  .tabbar{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;height:74px;background:var(--panel);border-top:1px solid var(--line);display:flex;padding-bottom:14px;z-index:10}
+  .tabbar .item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:10px;color:var(--muted);cursor:pointer;background:none;border:none;font-family:inherit}
+  .tabbar .item.active{color:var(--accent);font-weight:700}
+  .tabbar .ic{width:19px;height:19px;border-radius:5px;border:1.5px solid currentColor}
+
+  /* ---------- 登入畫面 ---------- */
+  .auth-wrap{flex:1;display:flex;flex-direction:column;justify-content:center;padding:32px 28px}
+  .auth-wrap .brand-mark{width:44px;height:44px;border:2px solid var(--accent);border-radius:6px;display:flex;align-items:center;justify-content:center;transform:rotate(45deg);margin-bottom:20px}
+  .auth-wrap .brand-mark span{transform:rotate(-45deg);font-family:'Chakra Petch';font-weight:700;color:var(--accent)}
+  .auth-wrap h1{font-family:'Chakra Petch';font-size:22px;margin:0 0 4px;font-weight:700}
+  .auth-wrap p.sub{margin:0 0 26px;font-size:12.5px;color:var(--muted)}
+  .auth-switch{text-align:center;margin-top:16px;font-size:12px;color:var(--muted)}
+  .auth-switch b{color:var(--accent);cursor:pointer}
+  .loading{text-align:center;padding:60px 20px;color:var(--muted);font-family:'JetBrains Mono';font-size:12px}
+</style>
+</head>
+<body>
+<div id="app"><div class="loading">載入中…</div></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {
+  getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {
+  getFirestore, doc, getDoc, addDoc, updateDoc, collection,
+  query, where, orderBy, onSnapshot, serverTimestamp
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+// ------------------------------------------------------------
+// Firebase 設定：共用衛生營系統（medical-battalion-tracker）專案
+// ------------------------------------------------------------
+const firebaseConfig = {
+  apiKey: "AIzaSyDHJ_ZVLwl9-bD-ZPCTsBcfSjK1A15oJN4",
+  authDomain: "medical-battalion-tracker.firebaseapp.com",
+  projectId: "medical-battalion-tracker",
+  storageBucket: "medical-battalion-tracker.firebasestorage.app",
+  messagingSenderId: "442272611220",
+  appId: "1:442272611220:web:88ef96f7789200c27ded81",
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+// 本系統獨立 collection（避免與衛生營原系統資料衝突）
+const COL_REQUESTS = "forward_support_requests";
+const COL_ASSIGNMENTS = "forward_support_assignments";
+const COL_UNITS = "forward_support_units";
+
+const UNITS_INTERNAL = ["營部", "一連", "二連"];
+const STATUS_LABEL = { pending:"待審核", assigned:"已分發", filled:"已完成", rejected:"不核准" };
+
+let currentUser = null;   // Firebase Auth user
+let profile = null;       // Firestore users/{uid} 文件內容
+let allRequests = [];     // 目前使用者可見的任務快取
+let unsubRequests = null;
+let activeTab = null;
+
+const $app = document.getElementById("app");
+
+// ------------------------------------------------------------
+// Auth 狀態監聽
+// ------------------------------------------------------------
+onAuthStateChanged(auth, async (user) => {
+  if (unsubRequests) { unsubRequests(); unsubRequests = null; }
+  currentUser = user;
+  if (!user) { profile = null; renderLogin(); return; }
+
+  const snap = await getDoc(doc(db, "users", user.uid));
+  if (!snap.exists()) {
+    await signOut(auth);
+    renderLogin();
+    setTimeout(() => {
+      const msg = document.getElementById("authMsg");
+      if (msg) msg.innerHTML = `<div class="msg error">找不到此帳號的角色設定，請聯絡管理者</div>`;
+    }, 0);
+    return;
+  }
+  profile = snap.data();
+  if (profile.fsr_role === "applicant" || !profile.fsr_role) {
+    await signOut(auth);
+    renderLogin();
+    setTimeout(() => {
+      const msg = document.getElementById("authMsg");
+      if (msg) msg.innerHTML = `<div class="msg error">此帳號為申請單位帳號，請至申請人站登入</div>`;
+    }, 0);
+    return;
+  }
+  bootRoleApp();
+});
+
+// ==============================================================
+// 登入（本站僅供內部人員，無註冊功能）
+// ==============================================================
+function renderLogin() {
+  $app.innerHTML = `
+    <div class="auth-wrap">
+      <div class="brand-mark"><span>前</span></div>
+      <h1>前支任務指揮台</h1>
+      <p class="sub">FORWARD SUPPORT DISPATCH ・ 衛生營內部人員專用</p>
+      <div id="authMsg"></div>
+      ${loginFormHtml()}
+    </div>`;
+  document.getElementById("loginBtn").onclick = doLogin;
+}
+
+function loginFormHtml() {
+  return `
+    <div class="field"><label>帳號 EMAIL</label><input id="loginEmail" type="email" placeholder="you@example.com"></div>
+    <div class="field"><label>密碼</label><input id="loginPass" type="password" placeholder="••••••••"></div>
+    <button class="btn btn-primary" id="loginBtn">登入</button>`;
+}
+
+async function doLogin() {
+  const email = document.getElementById("loginEmail").value.trim();
+  const pass = document.getElementById("loginPass").value;
+  const msg = document.getElementById("authMsg");
+  msg.innerHTML = "";
+  if (!email || !pass) { msg.innerHTML = `<div class="msg error">請輸入帳號密碼</div>`; return; }
+  try {
+    await signInWithEmailAndPassword(auth, email, pass);
+  } catch (e) {
+    msg.innerHTML = `<div class="msg error">登入失敗：${authErrorText(e)}</div>`;
+  }
+}
+
+function authErrorText(e) {
+  const code = e && e.code || "";
+  if (code.includes("invalid-email")) return "Email 格式不正確";
+  if (code.includes("wrong-password") || code.includes("invalid-credential")) return "帳號或密碼錯誤";
+  if (code.includes("user-not-found")) return "帳號不存在";
+  return e.message || "發生未知錯誤";
+}
+
+// ==============================================================
+// 依角色啟動對應介面
+// fsr_role: dispatcher | battalion_hq | company1 | company2 | admin
+// ==============================================================
+function bootRoleApp() {
+  const role = profile.fsr_role;
+  if (role === "dispatcher" || role === "admin") { activeTab = "pending"; renderDispatcherShell(); watchRequestsForDispatcher(); }
+  else { activeTab = "assigned"; renderUnitShell(); watchRequestsForUnit(); }
+}
+
+function unitKeyToLabel(k){ return {battalion_hq:"營部", company1:"一連", company2:"二連"}[k] || k; }
+
+// ---------------- 共用：頂部列 + 登出 ----------------
+function topbarHtml(title, sub) {
+  return `
+    <div class="topbar">
+      <div class="row">
+        <div>
+          <div class="eyebrow">FORWARD SUPPORT</div>
+          <h1>${title}</h1>
+          <p>${sub}</p>
+        </div>
+        <button class="btn-logout" id="logoutBtn">登出</button>
+      </div>
+    </div>`;
+}
+function bindLogout(){ document.getElementById("logoutBtn").onclick = () => signOut(auth); }
+
+// ==============================================================
+// 承辦人 / 管理者
+// ==============================================================
+function renderDispatcherShell() {
+  $app.innerHTML = `
+    ${topbarHtml("前支任務指揮台", "承辦人 ・ " + (profile.email || ""))}
+    <div class="tabs">
+      <div class="tab" data-tab="pending">待審核</div>
+      <div class="tab" data-tab="assigned">已分發</div>
+      <div class="tab" data-tab="filled">已完成</div>
+      <div class="tab" data-tab="all">全部</div>
+    </div>
+    <div class="content" id="content"></div>
+    <div class="tabbar">
+      <button class="item" data-tab="pending"><div class="ic"></div>待審核</button>
+      <button class="item" data-tab="assigned"><div class="ic"></div>已分發</button>
+      <button class="item" data-tab="filled"><div class="ic"></div>已完成</button>
+      <button class="item" data-tab="all"><div class="ic"></div>全部</button>
+    </div>`;
+  bindLogout();
+  document.querySelectorAll("[data-tab]").forEach(el => el.onclick = () => { activeTab = el.dataset.tab; renderDispatcherContent(); });
+  renderDispatcherContent();
+}
+
+function renderDispatcherContent() {
+  document.querySelectorAll(".tab,.tabbar .item").forEach(el => el.classList.toggle("active", el.dataset.tab === activeTab));
+  const c = document.getElementById("content");
+  const counts = {
+    pending: allRequests.filter(r=>r.status==="pending").length,
+    assigned: allRequests.filter(r=>r.status==="assigned").length,
+    filled: allRequests.filter(r=>r.status==="filled").length,
+  };
+  const statsHtml = `
+    <div class="stats">
+      <div class="stat amber"><div class="n">${counts.pending}</div><div class="l">待審核</div></div>
+      <div class="stat blue"><div class="n">${counts.assigned}</div><div class="l">已分發</div></div>
+      <div class="stat green"><div class="n">${counts.filled}</div><div class="l">已完成</div></div>
+    </div>`;
+  let list = allRequests;
+  if (activeTab !== "all") list = allRequests.filter(r => r.status === activeTab);
+  if (list.length === 0) { c.innerHTML = statsHtml + `<div class="empty">這個分類目前沒有任務</div>`; return; }
+  c.innerHTML = statsHtml + list.map(r => taskCardHtml(r, true)).join("");
+  list.forEach(r => {
+    const assignBtn = document.getElementById(`assign-${r.id}`);
+    if (assignBtn) assignBtn.onclick = () => openAssignPrompt(r);
+    const rejectBtn = document.getElementById(`reject-${r.id}`);
+    if (rejectBtn) rejectBtn.onclick = () => rejectRequest(r);
+  });
+}
+
+async function openAssignPrompt(r) {
+  const choice = prompt("分發給哪個單位？請輸入：營部 / 一連 / 二連", "營部");
+  if (!choice || !UNITS_INTERNAL.includes(choice.trim())) { if (choice!==null) alert("請輸入正確單位名稱：營部、一連 或 二連"); return; }
+  try {
+    await updateDoc(doc(db, COL_REQUESTS, r.id), {
+      status: "assigned", assignedUnit: choice.trim(),
+      reviewedBy: currentUser.uid, reviewedAt: serverTimestamp(),
+    });
+  } catch (e) { alert("分發失敗：" + e.message); }
+}
+
+async function rejectRequest(r) {
+  if (!confirm("確定要駁回這筆申請嗎？")) return;
+  try {
+    await updateDoc(doc(db, COL_REQUESTS, r.id), {
+      status: "rejected", reviewedBy: currentUser.uid, reviewedAt: serverTimestamp(),
+    });
+  } catch (e) { alert("操作失敗：" + e.message); }
+}
+
+function watchRequestsForDispatcher() {
+  const q = query(collection(db, COL_REQUESTS), orderBy("createdAt", "desc"));
+  unsubRequests = onSnapshot(q, (snap) => {
+    allRequests = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderDispatcherContent();
+  });
+}
+
+// ==============================================================
+// 營部 / 一連 / 二連（填寫車長駕駛）
+// ==============================================================
+function renderUnitShell() {
+  const unitLabel = unitKeyToLabel(profile.fsr_role);
+  $app.innerHTML = `
+    ${topbarHtml("前支任務・" + unitLabel, unitLabel + " ・ " + (profile.email || ""))}
+    <div class="tabs">
+      <div class="tab" data-tab="assigned">待填寫</div>
+      <div class="tab" data-tab="filled">已完成</div>
+    </div>
+    <div class="content" id="content"></div>
+    <div class="tabbar">
+      <button class="item" data-tab="assigned"><div class="ic"></div>待填寫</button>
+      <button class="item" data-tab="filled"><div class="ic"></div>已完成</button>
+    </div>`;
+  bindLogout();
+  document.querySelectorAll("[data-tab]").forEach(el => el.onclick = () => { activeTab = el.dataset.tab; renderUnitContent(); });
+  renderUnitContent();
+}
+
+function renderUnitContent() {
+  document.querySelectorAll(".tab,.tabbar .item").forEach(el => el.classList.toggle("active", el.dataset.tab === activeTab));
+  const c = document.getElementById("content");
+  const list = allRequests.filter(r => r.status === activeTab);
+  if (list.length === 0) { c.innerHTML = `<div class="empty">目前沒有任務</div>`; return; }
+  c.innerHTML = list.map(r => taskCardHtml(r, false, true)).join("");
+  list.forEach(r => {
+    const fillBtn = document.getElementById(`fill-${r.id}`);
+    if (fillBtn) fillBtn.onclick = () => openFillForm(r);
+  });
+}
+
+async function openFillForm(r) {
+  const commanderRank = prompt("車長級職："); if (commanderRank === null) return;
+  const commanderName = prompt("車長姓名："); if (commanderName === null) return;
+  const driverRank = prompt("駕駛級職："); if (driverRank === null) return;
+  const driverName = prompt("駕駛姓名："); if (driverName === null) return;
+  const vehicleNumber = prompt("車號（選填）：") || "";
+  try {
+    await addDoc(collection(db, COL_ASSIGNMENTS), {
+      requestId: r.id, unit: unitKeyToLabel(profile.fsr_role),
+      vehicleCommanderRank: commanderRank, vehicleCommanderName: commanderName,
+      driverRank, driverName, vehicleNumber,
+      filledBy: currentUser.uid, filledAt: serverTimestamp(),
+    });
+    await updateDoc(doc(db, COL_REQUESTS, r.id), { status: "filled" });
+  } catch (e) { alert("填寫失敗：" + e.message); }
+}
+
+function watchRequestsForUnit() {
+  const label = unitKeyToLabel(profile.fsr_role);
+  const q = query(collection(db, COL_REQUESTS), where("assignedUnit", "==", label), orderBy("createdAt", "desc"));
+  unsubRequests = onSnapshot(q, (snap) => {
+    allRequests = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderUnitContent();
+  });
+}
+
+// ==============================================================
+// 共用卡片渲染
+// ==============================================================
+function taskCardHtml(r, withDispatchActions=false, withFillAction=false) {
+  const start = fmtTs(r.taskStartTime), end = fmtTs(r.taskEndTime);
+  const tagClass = r.status === "pending" ? "pending" : r.status === "assigned" ? "assigned" : r.status === "filled" ? "filled" : "rejected";
+  let actions = "";
+  if (withDispatchActions && r.status === "pending") {
+    actions = `<div class="actions">
+      <button class="btn btn-small btn-green" id="assign-${r.id}">分發</button>
+      <button class="btn btn-small btn-red" id="reject-${r.id}">駁回</button>
+    </div>`;
+  }
+  if (withFillAction && r.status === "assigned") {
+    actions = `<div class="actions"><button class="btn btn-small btn-blue" id="fill-${r.id}">填寫車長／駕駛</button></div>`;
+  }
+  return `
+    <div class="card">
+      <div class="task-top">
+        <span class="id">#${(r.id||"").slice(-6).toUpperCase()}</span>
+        <span class="tag ${tagClass}">${STATUS_LABEL[r.status] || r.status}${r.assignedUnit ? "・" + r.assignedUnit : ""}</span>
+      </div>
+      <h3>${escapeHtml(r.location || "")}</h3>
+      <p>申請單位｜${escapeHtml(r.applicantUnit || "")}</p>
+      <p>申請人｜${escapeHtml(r.applicantRank || "")} ${escapeHtml(r.applicantName || "")}</p>
+      ${r.remarks ? `<p>備註｜${escapeHtml(r.remarks)}</p>` : ""}
+      <div class="time">${start} — ${end}</div>
+      ${actions}
+    </div>`;
+}
+
+function fmtTs(ts) {
+  if (!ts) return "—";
+  const d = ts.toDate ? ts.toDate() : new Date(ts);
+  const p = n => String(n).padStart(2,"0");
+  return `${p(d.getMonth()+1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+</script>
+</body>
+</html>
