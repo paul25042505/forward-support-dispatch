@@ -144,7 +144,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-07-31.17";
+const BUILD_VERSION = "2026-07-31.18";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -315,7 +315,7 @@ function renderDispatcherShell() {
   activeSection = "tasks";
   const isAdmin = profile.fsr_role === "admin";
   $app.innerHTML = `
-    ${topbarHtml("前支任務指揮台", (isAdmin ? "管理者" : "承辦人") + " ・ " + escapeHtml(profile.email || ""))}
+    ${topbarHtml("前支任務指揮台", (isAdmin ? "管理者" : "承辦人") + " ・ " + escapeHtml(displayNameOf(profile)))}
     <div class="content" id="content"></div>
     <div class="tabbar">
       <button class="item" data-section="tasks"><div class="ic"></div>任務</button>
@@ -546,7 +546,8 @@ function drawAccountsList() {
     ? `<div class="empty">目前還沒有內部人員角色</div>`
     : internalAccounts.map(a => `
       <div class="card">
-        <h3>${escapeHtml(a.email || a.id)}</h3>
+        <h3>${escapeHtml(a.rank ? a.rank + " " : "")}${escapeHtml(a.displayName || a.email || a.id)}</h3>
+        <p>Email｜${escapeHtml(a.email || "")}</p>
         <div class="field" style="margin-top:10px"><label>角色</label>
           <select id="role-${a.id}">
             ${Object.entries(ROLE_LABEL).map(([v,l]) => `<option value="${v}" ${a.fsr_role===v?"selected":""}>${l}</option>`).join("")}
@@ -615,8 +616,10 @@ async function doSetInternalRole() {
       return;
     }
     const targetDoc = snap.docs[0];
+    const targetData = targetDoc.data();
     await updateDoc(doc(db, "users", targetDoc.id), { fsr_role: role });
-    msg.innerHTML = `<div class="msg ok">已將 ${escapeHtml(email)} 設定為「${ROLE_LABEL[role]}」</div>`;
+    const displayName = (targetData.rank ? targetData.rank + " " : "") + (targetData.displayName || email);
+    msg.innerHTML = `<div class="msg ok">已將 ${escapeHtml(displayName)} 設定為「${ROLE_LABEL[role]}」</div>`;
     document.getElementById("setRoleEmail").value = "";
   } catch (e) {
     msg.innerHTML = `<div class="msg error">設定失敗：${e.message}</div>`;
@@ -684,7 +687,7 @@ function watchRequestsForDispatcher() {
 function renderUnitShell() {
   const unitLabel = unitKeyToLabel(profile.fsr_role);
   $app.innerHTML = `
-    ${topbarHtml("前支任務・" + unitLabel, unitLabel + " ・ " + escapeHtml(profile.email || ""))}
+    ${topbarHtml("前支任務・" + unitLabel, unitLabel + " ・ " + escapeHtml(displayNameOf(profile)))}
     <div class="tabs">
       <div class="tab" data-tab="assigned">待填寫</div>
       <div class="tab" data-tab="filled">已完成</div>
@@ -772,6 +775,11 @@ function fmtTs(ts) {
   return `${p(d.getMonth()+1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 function escapeHtml(s){ return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+function displayNameOf(p) {
+  if (!p) return "";
+  const namePart = (p.rank ? p.rank + " " : "") + (p.displayName || "");
+  return namePart.trim() || p.email || "";
+}
 
 // ==============================================================
 // 下拉重新整理（在頁面最頂端往下拉，放開後重新整理頁面）
