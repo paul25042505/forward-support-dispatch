@@ -11,7 +11,7 @@
     --bg:#f2f4f8; --panel:#ffffff; --panel2:#eef1f7; --line:#dce1eb;
     --text:#171b26; --muted:#6b7488; --accent:#d9631f; --blue:#2f6fe0;
     --green:#1f9d5c; --amber:#c98a0e; --red:#d64545; --shadow:0 1px 3px rgba(20,25,40,.05);
-    --fab-text:#fff;
+    --fab-text:#fff; --app-max-width:480px; --page-bg:var(--bg);
   }
   @media (prefers-color-scheme: dark){
     :root{
@@ -21,10 +21,13 @@
       --fab-text:#111;
     }
   }
+  @media (min-width:768px){ :root{ --app-max-width:640px; --page-bg:var(--panel2); } }
+  @media (min-width:1200px){ :root{ --app-max-width:760px; } }
   *{box-sizing:border-box}
-  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-serif;-webkit-tap-highlight-color:transparent;-webkit-text-size-adjust:100%;text-size-adjust:100%;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:manipulation}
+  html,body{margin:0;height:100%;background:var(--page-bg);color:var(--text);font-family:'Noto Sans TC',sans-serif;-webkit-tap-highlight-color:transparent;-webkit-text-size-adjust:100%;text-size-adjust:100%;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:manipulation}
   input,textarea{-webkit-user-select:text;user-select:text}
-  #app{max-width:480px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column;position:relative;background:var(--bg);overflow-x:hidden}
+  #app{max-width:var(--app-max-width);margin:0 auto;min-height:100vh;display:flex;flex-direction:column;position:relative;background:var(--bg);overflow-x:hidden}
+  @media (min-width:768px){ #app{box-shadow:0 0 0 1px var(--line);min-height:100vh} }
   input,select,textarea,button{font-family:inherit}
   a{color:inherit}
 
@@ -104,15 +107,34 @@
   .cal-cell.selected{background:color-mix(in srgb, var(--accent) 16%, transparent);border-color:var(--accent)}
   .cal-cell .dot{width:5px;height:5px;border-radius:50%;background:var(--accent);margin-top:3px}
 
-  .tabbar{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;height:74px;background:var(--panel);border-top:1px solid var(--line);display:flex;padding-bottom:14px;z-index:10}
+  .tabbar{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:var(--app-max-width);height:74px;background:var(--panel);border-top:1px solid var(--line);display:flex;padding-bottom:14px;z-index:10}
   .tabbar .item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:10px;color:var(--muted);cursor:pointer;background:none;border:none;font-family:inherit}
   .tabbar .item.active{color:var(--accent);font-weight:700}
 
-  .fab{position:fixed;right:20px;bottom:90px;width:56px;height:56px;border-radius:50%;background:var(--accent);color:var(--fab-text);border:none;font-size:28px;line-height:1;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(0,0,0,.28);z-index:12;cursor:pointer}
+  .fab{position:absolute;right:20px;bottom:90px;width:56px;height:56px;border-radius:50%;background:var(--accent);color:var(--fab-text);border:none;font-size:28px;line-height:1;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(0,0,0,.28);z-index:12;cursor:pointer}
   .viewmode-cards{display:flex;gap:10px;margin-bottom:16px}
   .viewmode-card{width:76px;height:76px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:14px;cursor:pointer;font-size:12px;font-weight:600;color:var(--muted)}
   .viewmode-card.active{background:color-mix(in srgb, var(--accent) 14%, transparent);border-color:var(--accent);color:var(--accent)}
   .back-link{display:inline-block;font-family:'JetBrains Mono';font-size:10.5px;color:var(--muted);border:1px solid var(--line);background:var(--panel2);padding:6px 12px;border-radius:20px;cursor:pointer;margin-bottom:14px}
+
+  /* ---------- 標籤 ---------- */
+  .tag-chip{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:600;color:var(--tag-color, var(--muted));margin-bottom:6px}
+  .tag-chip::before{content:'';width:7px;height:7px;border-radius:50%;background:var(--tag-color, var(--muted));flex-shrink:0}
+  .tag-picker{display:flex;gap:8px;flex-wrap:wrap}
+  .tag-pick-chip{padding:7px 12px;border-radius:20px;font-size:12px;font-weight:600;border:1.5px solid var(--tag-color);color:var(--tag-color);cursor:pointer;background:color-mix(in srgb, var(--tag-color) 10%, transparent)}
+  .tag-pick-chip.selected{background:var(--tag-color);color:#fff}
+  .color-swatches{display:flex;gap:8px;flex-wrap:wrap}
+  .color-swatch{width:28px;height:28px;border-radius:50%;cursor:pointer;border:2px solid transparent}
+  .color-swatch.selected{border-color:var(--text)}
+
+  /* ---------- 底部彈出選單／彈窗 ---------- */
+  .sheet-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:30;display:flex;align-items:flex-end;justify-content:center}
+  .sheet{width:100%;max-width:var(--app-max-width);max-height:88vh;overflow-y:auto;background:var(--panel);border-radius:16px 16px 0 0;padding:6px 0 max(10px, env(safe-area-inset-bottom))}
+  .sheet-title{padding:14px 20px 10px;font-size:12.5px;color:var(--muted);border-bottom:1px solid var(--line)}
+  .sheet-item{display:block;width:100%;text-align:center;padding:16px;font-size:15px;color:var(--text);background:none;border:none;border-bottom:1px solid var(--line);cursor:pointer;font-family:inherit}
+  .sheet-item.danger{color:var(--red)}
+  .sheet-item.cancel{border-bottom:none;color:var(--muted);font-weight:700;margin-top:6px}
+  .copy-modal .cal-grid{grid-auto-rows:38px}
 
   /* ---------- 登入畫面 ---------- */
   .auth-wrap{flex:1;display:flex;flex-direction:column;justify-content:center;padding:32px 28px}
@@ -125,7 +147,7 @@
   .loading{text-align:center;padding:60px 20px;color:var(--muted);font-family:'JetBrains Mono';font-size:12px}
 
   /* ---------- 下拉重新整理 ---------- */
-  .pull-indicator{position:fixed;top:0;left:50%;transform:translateX(-50%) translateY(-100%);width:100%;max-width:480px;display:flex;justify-content:center;align-items:center;padding:14px 0;z-index:50;pointer-events:none;transition:none}
+  .pull-indicator{position:fixed;top:0;left:50%;transform:translateX(-50%) translateY(-100%);width:100%;max-width:var(--app-max-width);display:flex;justify-content:center;align-items:center;padding:14px 0;z-index:50;pointer-events:none;transition:none}
   .pull-indicator .spinner{width:20px;height:20px;border:2.5px solid var(--line);border-top-color:var(--accent);border-radius:50%}
   .pull-indicator .spinner.spin{animation:pullspin .7s linear infinite}
   @keyframes pullspin{to{transform:rotate(360deg)}}
@@ -141,7 +163,7 @@ import {
   GoogleAuthProvider, signOut, sendPasswordResetEmail
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
-  getFirestore, doc, getDoc, getDocs, addDoc, updateDoc, collection,
+  getFirestore, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, collection,
   query, where, orderBy, onSnapshot, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
@@ -157,7 +179,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-07-31.24";
+const BUILD_VERSION = "2026-07-31.26";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -177,6 +199,9 @@ getRedirectResult(auth).catch((e) => {
 const COL_REQUESTS = "forward_support_requests";
 const COL_ASSIGNMENTS = "forward_support_assignments";
 const COL_UNITS = "forward_support_units";
+const COL_TAGS = "forward_support_tags";
+
+const TAG_COLOR_PALETTE = ["#d9631f","#2f6fe0","#1f9d5c","#c98a0e","#d64545","#8b5cf6","#0891b2","#db2777"];
 
 // 底部導覽列圖示（線條風格，stroke 用 currentColor 跟著 active 狀態變色）
 const ICON_HOME = `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9a1 1 0 0 0 1 1H9a1 1 0 0 0 1-1v-4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v4a1 1 0 0 0 1 1h2.5a1 1 0 0 0 1-1v-9"/></svg>`;
@@ -196,6 +221,9 @@ let allRequests = [];     // 目前使用者可見的任務快取
 let unsubRequests = null;
 let activeTab = null;
 let gateErrorText = null; // 登入被擋下時要顯示的錯誤訊息（避免 signOut 觸發的重繪把訊息蓋掉）
+let availableTags = [];   // 前支種類標籤快取
+let unsubTags = null;
+let pickedTagId = null;   // 新增／編輯任務表單目前選取的標籤
 
 const $app = document.getElementById("app");
 
@@ -305,8 +333,17 @@ function authErrorText(e) {
 // ==============================================================
 function bootRoleApp() {
   const role = profile.fsr_role;
-  if (role === "dispatcher" || role === "admin") { activeTab = "pending"; renderDispatcherShell(); watchRequestsForDispatcher(); }
+  if (role === "dispatcher" || role === "admin") { activeTab = "pending"; renderDispatcherShell(); watchRequestsForDispatcher(); watchTags(); }
   else { activeTab = "assigned"; renderUnitShell(); watchRequestsForUnit(); }
+}
+
+function watchTags() {
+  if (unsubTags) unsubTags();
+  const q = query(collection(db, COL_TAGS), orderBy("name"));
+  unsubTags = onSnapshot(q, (snap) => {
+    availableTags = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    if (activeSection === "more") drawAccountsList();
+  });
 }
 
 function unitKeyToLabel(k){ return {battalion_hq:"營部", company1:"一連", company2:"二連"}[k] || k; }
@@ -360,6 +397,7 @@ function renderDispatcherSection() {
   else if (activeSection === "records") renderRecordsView();
   else if (activeSection === "more") renderMoreView();
   else if (activeSection === "create") renderDispatcherCreateView();
+  else if (activeSection === "edit") renderEditTaskView(editingTask);
 }
 
 // ---- 子頁：首頁（待審核任務 + 本週任務總覽）----
@@ -381,6 +419,7 @@ function renderHomeView() {
   c.innerHTML = statsHtml +
     `<div class="section-lbl">待審核</div>${pendingHtml}` +
     `<div class="section-lbl" style="margin-top:22px">本週任務</div>${weekHtml}`;
+  bindCardMenu(c);
   pending.forEach(r => {
     const assignBtn = document.getElementById(`assign-${r.id}`);
     if (assignBtn) assignBtn.onclick = () => openAssignPrompt(r);
@@ -450,6 +489,7 @@ function renderDispatcherContent() {
   if (activeTab !== "all") list = allRequests.filter(r => r.status === activeTab);
   area.innerHTML = statsHtml + (list.length === 0 ? `<div class="empty">這個分類目前沒有任務</div>` : list.map(r => taskCardHtml(r, true)).join(""));
   document.querySelectorAll("#taskListArea .status-card").forEach(el => el.onclick = () => { activeTab = el.dataset.tab; renderDispatcherContent(); });
+  bindCardMenu(area);
   list.forEach(r => {
     const assignBtn = document.getElementById(`assign-${r.id}`);
     if (assignBtn) assignBtn.onclick = () => openAssignPrompt(r);
@@ -519,6 +559,7 @@ function renderCalendarView() {
   }
   listEl.innerHTML = `<div class="section-lbl">${selectedCalendarDate} ・ 共 ${list.length} 筆</div>` +
     list.map(r => taskCardHtml(r, r.status === "pending")).join("");
+  bindCardMenu(listEl);
   list.forEach(r => {
     const assignBtn = document.getElementById(`assign-${r.id}`);
     if (assignBtn) assignBtn.onclick = () => openAssignPrompt(r);
@@ -554,9 +595,31 @@ function drawRecordsList() {
   area.innerHTML = list.length === 0
     ? `<div class="empty">這個範圍內沒有任務紀錄</div>`
     : list.map(r => taskCardHtml(r, false)).join("");
+  bindCardMenu(area);
+}
+
+// ---- 共用：標籤選取器（新增／編輯任務表單共用）----
+function tagPickerHtml(pickerId, selectedTagId) {
+  if (availableTags.length === 0) return `<p style="font-size:11px;color:var(--muted)">尚未設定標籤，可以到「更多」頁新增</p>`;
+  return `<div class="tag-picker" id="${pickerId}">
+    ${availableTags.map(t => `<div class="tag-pick-chip${t.id===selectedTagId?" selected":""}" data-tagid="${t.id}" style="--tag-color:${escapeHtml(t.color)}">${escapeHtml(t.name)}</div>`).join("")}
+  </div>`;
+}
+function bindTagPicker(pickerId) {
+  document.querySelectorAll(`#${pickerId} .tag-pick-chip`).forEach(el => {
+    el.onclick = () => {
+      pickedTagId = pickedTagId === el.dataset.tagid ? null : el.dataset.tagid;
+      document.querySelectorAll(`#${pickerId} .tag-pick-chip`).forEach(c => c.classList.toggle("selected", c.dataset.tagid === pickedTagId));
+    };
+  });
+}
+function currentPickedTag() {
+  const t = availableTags.find(t => t.id === pickedTagId);
+  return t ? { tagId: t.id, tagName: t.name, tagColor: t.color } : { tagId: null, tagName: null, tagColor: null };
 }
 
 function renderDispatcherCreateView() {
+  pickedTagId = null;
   const c = document.getElementById("content");
   c.innerHTML = `
     <button class="back-link" id="backFromCreate">← 返回</button>
@@ -570,6 +633,7 @@ function renderDispatcherCreateView() {
     <div class="field"><label>開始時間</label><input id="cStart" type="datetime-local"></div>
     <div class="field"><label>結束時間</label><input id="cEnd" type="datetime-local"></div>
     <div class="field"><label>備註（選填）</label><textarea id="cRemarks"></textarea></div>
+    <div class="field"><label>前支種類（選填）</label>${tagPickerHtml("cTagPicker", null)}</div>
     <div class="field"><label>直接分發給（選填，不選則先進待審核）</label>
       <select id="cAssign">
         <option value="">不分發，先待審核</option>
@@ -579,6 +643,7 @@ function renderDispatcherCreateView() {
       </select>
     </div>
     <button class="btn btn-primary" id="createBtn">送出任務</button>`;
+  bindTagPicker("cTagPicker");
   document.getElementById("createBtn").onclick = doDispatcherCreate;
   document.getElementById("backFromCreate").onclick = () => { activeSection = fabReturnSection; renderDispatcherSection(); };
 }
@@ -605,6 +670,7 @@ async function doDispatcherCreate() {
       taskStartTime: startTs,
       taskEndTime: endTs,
       remarks,
+      ...currentPickedTag(),
       status: assign ? "assigned" : "pending",
       assignedUnit: assign || null,
       createdAt: serverTimestamp(),
@@ -616,8 +682,68 @@ async function doDispatcherCreate() {
     msg.innerHTML = `<div class="msg ok">任務已建立</div>`;
     ["cUnit","cRank","cName","cLoc","cStart","cEnd","cRemarks"].forEach(id => document.getElementById(id).value = "");
     document.getElementById("cAssign").value = "";
+    pickedTagId = null;
+    document.querySelectorAll("#cTagPicker .tag-pick-chip").forEach(c => c.classList.remove("selected"));
   } catch (e) {
     msg.innerHTML = `<div class="msg error">建立失敗：${e.message}</div>`;
+  }
+}
+
+// ---- 子頁：編輯任務 ----
+function toDatetimeLocalValue(d) {
+  const p = n => String(n).padStart(2,"0");
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+function renderEditTaskView(r) {
+  pickedTagId = r.tagId || null;
+  const c = document.getElementById("content");
+  const startVal = r.taskStartTime ? toDatetimeLocalValue(tsToDate(r.taskStartTime)) : "";
+  const endVal = r.taskEndTime ? toDatetimeLocalValue(tsToDate(r.taskEndTime)) : "";
+  c.innerHTML = `
+    <button class="back-link" id="backFromEdit">← 返回</button>
+    <div id="editMsg"></div>
+    <div class="field"><label>申請單位</label><input id="eUnit" value="${escapeHtml(r.applicantUnit || "")}"></div>
+    <div class="row2">
+      <div class="field"><label>申請人級職</label><input id="eRank" value="${escapeHtml(r.applicantRank || "")}"></div>
+      <div class="field"><label>申請人姓名</label><input id="eName" value="${escapeHtml(r.applicantName || "")}"></div>
+    </div>
+    <div class="field"><label>任務地點</label><input id="eLoc" value="${escapeHtml(r.location || "")}"></div>
+    <div class="field"><label>開始時間</label><input id="eStart" type="datetime-local" value="${startVal}"></div>
+    <div class="field"><label>結束時間</label><input id="eEnd" type="datetime-local" value="${endVal}"></div>
+    <div class="field"><label>備註（選填）</label><textarea id="eRemarks">${escapeHtml(r.remarks || "")}</textarea></div>
+    <div class="field"><label>前支種類（選填）</label>${tagPickerHtml("eTagPicker", r.tagId || null)}</div>
+    <button class="btn btn-primary" id="saveEditBtn">儲存修改</button>`;
+  bindTagPicker("eTagPicker");
+  document.getElementById("saveEditBtn").onclick = () => doSaveEdit(r.id);
+  document.getElementById("backFromEdit").onclick = () => { activeSection = fabReturnSection; renderDispatcherSection(); };
+}
+
+async function doSaveEdit(taskId) {
+  const msg = document.getElementById("editMsg");
+  const unit = document.getElementById("eUnit").value.trim();
+  const rank = document.getElementById("eRank").value.trim();
+  const name = document.getElementById("eName").value.trim();
+  const loc = document.getElementById("eLoc").value.trim();
+  const start = document.getElementById("eStart").value;
+  const end = document.getElementById("eEnd").value;
+  const remarks = document.getElementById("eRemarks").value.trim();
+  if (!unit || !rank || !name || !loc || !start || !end) {
+    msg.innerHTML = `<div class="msg error">請完整填寫必填欄位</div>`; return;
+  }
+  try {
+    await updateDoc(doc(db, COL_REQUESTS, taskId), {
+      applicantUnit: unit, applicantRank: rank, applicantName: name,
+      location: loc,
+      taskStartTime: new Date(start),
+      taskEndTime: new Date(end),
+      remarks,
+      ...currentPickedTag(),
+    });
+    activeSection = fabReturnSection;
+    renderDispatcherSection();
+  } catch (e) {
+    msg.innerHTML = `<div class="msg error">儲存失敗：${e.message}</div>`;
   }
 }
 
@@ -691,6 +817,23 @@ function drawAccountsList() {
         </div>
       </div>`).join("");
 
+  const tagListHtml = availableTags.length === 0
+    ? `<div class="empty">目前還沒有標籤</div>`
+    : availableTags.map(t => `
+      <div class="card">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="width:14px;height:14px;border-radius:50%;background:${escapeHtml(t.color)};flex-shrink:0"></span>
+          <input id="tagname-${t.id}" value="${escapeHtml(t.name)}" style="min-width:0">
+        </div>
+        <div class="color-swatches" style="margin-top:10px" id="tagcolor-${t.id}">
+          ${TAG_COLOR_PALETTE.map(cc => `<div class="color-swatch${cc===t.color?" selected":""}" data-color="${cc}" style="background:${cc}"></div>`).join("")}
+        </div>
+        <div class="actions">
+          <button class="btn btn-small btn-blue" id="savetag-${t.id}">儲存</button>
+          <button class="btn btn-small btn-red" id="deltag-${t.id}">刪除標籤</button>
+        </div>
+      </div>`).join("");
+
   c.innerHTML = `
     <div class="section-lbl">設定內部人員角色</div>
     <div class="card">
@@ -709,7 +852,20 @@ function drawAccountsList() {
     ${internalListHtml}
 
     <div class="section-lbl" style="margin-top:22px">申請單位帳號</div>
-    ${applicantListHtml}`;
+    ${applicantListHtml}
+
+    <div class="section-lbl" style="margin-top:22px">前支種類標籤</div>
+    <div class="card">
+      <div id="tagMsg"></div>
+      <div class="field"><label>標籤名稱</label><input id="newTagName" placeholder="例：醫療後送"></div>
+      <div class="field"><label>顏色</label>
+        <div class="color-swatches" id="newTagColorSwatches">
+          ${TAG_COLOR_PALETTE.map((cc,i) => `<div class="color-swatch${i===0?" selected":""}" data-color="${cc}" style="background:${cc}"></div>`).join("")}
+        </div>
+      </div>
+      <button class="btn btn-primary" id="addTagBtn">新增標籤</button>
+    </div>
+    ${tagListHtml}`;
 
   document.getElementById("setRoleBtn").onclick = doSetInternalRole;
   internalAccounts.forEach(a => {
@@ -720,6 +876,51 @@ function drawAccountsList() {
     document.getElementById(`saveunit-${a.id}`).onclick = () => saveUnitName(a);
     document.getElementById(`resetpw-${a.id}`).onclick = () => sendResetPassword(a);
   });
+
+  let newTagColor = TAG_COLOR_PALETTE[0];
+  document.querySelectorAll("#newTagColorSwatches .color-swatch").forEach(el => {
+    el.onclick = () => {
+      newTagColor = el.dataset.color;
+      document.querySelectorAll("#newTagColorSwatches .color-swatch").forEach(s => s.classList.toggle("selected", s.dataset.color === newTagColor));
+    };
+  });
+  document.getElementById("addTagBtn").onclick = () => doAddTag(() => newTagColor);
+  availableTags.forEach(t => {
+    let editColor = t.color;
+    document.querySelectorAll(`#tagcolor-${t.id} .color-swatch`).forEach(el => {
+      el.onclick = () => {
+        editColor = el.dataset.color;
+        document.querySelectorAll(`#tagcolor-${t.id} .color-swatch`).forEach(s => s.classList.toggle("selected", s.dataset.color === editColor));
+      };
+    });
+    document.getElementById(`savetag-${t.id}`).onclick = () => saveTagNow(t.id, document.getElementById(`tagname-${t.id}`).value.trim(), () => editColor);
+    document.getElementById(`deltag-${t.id}`).onclick = () => deleteTagNow(t.id);
+  });
+}
+
+async function doAddTag(getColor) {
+  const nameInput = document.getElementById("newTagName");
+  const name = nameInput.value.trim();
+  const msg = document.getElementById("tagMsg");
+  if (!name) { msg.innerHTML = `<div class="msg error">請輸入標籤名稱</div>`; return; }
+  try {
+    await addDoc(collection(db, COL_TAGS), { name, color: getColor(), createdAt: serverTimestamp() });
+    msg.innerHTML = `<div class="msg ok">已新增標籤</div>`;
+    nameInput.value = "";
+  } catch (e) { msg.innerHTML = `<div class="msg error">新增失敗：${e.message}</div>`; }
+}
+
+async function saveTagNow(id, name, getColor) {
+  if (!name) { alert("標籤名稱不能空白"); return; }
+  try {
+    await updateDoc(doc(db, COL_TAGS, id), { name, color: getColor() });
+    alert("已更新標籤");
+  } catch (e) { alert("更新失敗：" + e.message); }
+}
+
+async function deleteTagNow(id) {
+  if (!confirm("確定要刪除這個標籤嗎？已經套用這個標籤的任務不會被刪除，只是標籤定義被移除。")) return;
+  try { await deleteDoc(doc(db, COL_TAGS, id)); } catch (e) { alert("刪除失敗：" + e.message); }
 }
 
 async function doSetInternalRole() {
@@ -790,6 +991,164 @@ async function rejectRequest(r) {
       status: "rejected", reviewedBy: currentUser.uid, reviewedAt: serverTimestamp(),
     });
   } catch (e) { alert("操作失敗：" + e.message); }
+}
+
+// ---- 任務卡片點擊：開啟編輯／複製／刪除選單（僅承辦人/管理者畫面使用）----
+function bindCardMenu(containerEl) {
+  if (!containerEl) return;
+  containerEl.onclick = (e) => {
+    if (e.target.closest("button")) return;
+    const card = e.target.closest(".card[data-taskid]");
+    if (!card) return;
+    openTaskActionSheet(card.dataset.taskid);
+  };
+}
+
+function openTaskActionSheet(taskId) {
+  const r = allRequests.find(x => x.id === taskId);
+  if (!r) return;
+  const canDelete = r.createdByDispatcher === true;
+  const overlay = document.createElement("div");
+  overlay.className = "sheet-overlay";
+  overlay.id = "sheetOverlay";
+  overlay.innerHTML = `
+    <div class="sheet">
+      <div class="sheet-title">${escapeHtml(r.location || "")}</div>
+      <button class="sheet-item" id="sheetEdit">編輯</button>
+      <button class="sheet-item" id="sheetCopy">複製到其他日期</button>
+      ${canDelete ? `<button class="sheet-item danger" id="sheetDelete">刪除</button>` : ""}
+      <button class="sheet-item cancel" id="sheetCancel">取消</button>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) closeSheet(); });
+  document.getElementById("sheetCancel").onclick = closeSheet;
+  document.getElementById("sheetEdit").onclick = () => { closeSheet(); openEditTask(r); };
+  document.getElementById("sheetCopy").onclick = () => { closeSheet(); openCopyToDatesModal(r); };
+  if (canDelete) document.getElementById("sheetDelete").onclick = () => { closeSheet(); confirmDeleteTask(r); };
+}
+
+function closeSheet() {
+  const overlay = document.getElementById("sheetOverlay");
+  if (overlay) overlay.remove();
+}
+
+let editingTask = null;
+function openEditTask(r) {
+  editingTask = r;
+  fabReturnSection = activeSection;
+  activeSection = "edit";
+  renderDispatcherSection();
+}
+
+async function confirmDeleteTask(r) {
+  if (!confirm(`確定要刪除「${r.location || ""}」這筆任務嗎？此動作無法復原。`)) return;
+  try {
+    await deleteDoc(doc(db, COL_REQUESTS, r.id));
+  } catch (e) { alert("刪除失敗：" + e.message); }
+}
+
+// ---- 複製到其他日期（多選行事曆，跟原本的複製到多天） ----
+let copySourceTask = null;
+let copySelectedDates = new Set();
+let copyCalMonth = new Date();
+
+function openCopyToDatesModal(task) {
+  copySourceTask = task;
+  copySelectedDates = new Set();
+  copyCalMonth = new Date();
+  renderCopyModal();
+}
+
+function closeCopyModal() {
+  const overlay = document.getElementById("copyModalOverlay");
+  if (overlay) overlay.remove();
+  copySourceTask = null;
+}
+
+function renderCopyModal() {
+  let overlay = document.getElementById("copyModalOverlay");
+  if (!overlay) {
+    overlay = document.createElement("div");
+    overlay.className = "sheet-overlay";
+    overlay.id = "copyModalOverlay";
+    document.body.appendChild(overlay);
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) closeCopyModal(); });
+  }
+  const y = copyCalMonth.getFullYear(), m = copyCalMonth.getMonth();
+  const firstDay = new Date(y, m, 1);
+  const startWeekday = firstDay.getDay();
+  const daysInMonth = new Date(y, m + 1, 0).getDate();
+  const todayKey = fmtDateKey(new Date());
+  let cellsHtml = "";
+  for (let i = 0; i < startWeekday; i++) cellsHtml += `<div class="cal-cell empty"></div>`;
+  for (let day = 1; day <= daysInMonth; day++) {
+    const key = `${y}-${String(m+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+    const sel = copySelectedDates.has(key);
+    cellsHtml += `<div class="cal-cell ${key===todayKey?"today":""} ${sel?"selected":""}" data-date="${key}"><span class="daynum">${day}</span></div>`;
+  }
+  overlay.innerHTML = `
+    <div class="sheet copy-modal">
+      <div class="sheet-title">複製「${escapeHtml(copySourceTask.location || "")}」到其他日期</div>
+      <div style="padding:14px 20px 0">
+        <div class="cal-header">
+          <button class="cal-nav" id="copyCalPrev">‹</button>
+          <div class="cal-title">${y} 年 ${m+1} 月</div>
+          <button class="cal-nav" id="copyCalNext">›</button>
+        </div>
+        <div class="cal-weekdays">${["日","一","二","三","四","五","六"].map(w=>`<div>${w}</div>`).join("")}</div>
+        <div class="cal-grid">${cellsHtml}</div>
+        <p style="font-size:11px;color:var(--muted);margin:10px 0 0">點選日期可複選，會保留原任務的時間長度</p>
+      </div>
+      <div style="padding:16px 20px">
+        <button class="btn btn-primary" id="copyConfirmBtn">複製到已選日期（${copySelectedDates.size}）</button>
+        <button class="back-link" id="copyCancelBtn" style="display:block;text-align:center;margin:10px auto 0">取消</button>
+      </div>
+    </div>`;
+  document.getElementById("copyCalPrev").onclick = () => { copyCalMonth = new Date(y, m-1, 1); renderCopyModal(); };
+  document.getElementById("copyCalNext").onclick = () => { copyCalMonth = new Date(y, m+1, 1); renderCopyModal(); };
+  document.querySelectorAll("#copyModalOverlay .cal-cell[data-date]").forEach(el => {
+    el.onclick = () => {
+      const k = el.dataset.date;
+      if (copySelectedDates.has(k)) copySelectedDates.delete(k); else copySelectedDates.add(k);
+      renderCopyModal();
+    };
+  });
+  document.getElementById("copyConfirmBtn").onclick = doCopyToDates;
+  document.getElementById("copyCancelBtn").onclick = closeCopyModal;
+}
+
+async function doCopyToDates() {
+  if (copySelectedDates.size === 0) { alert("請至少選一個日期"); return; }
+  const src = copySourceTask;
+  const btn = document.getElementById("copyConfirmBtn");
+  btn.disabled = true; btn.textContent = "複製中…";
+  const startBase = tsToDate(src.taskStartTime);
+  const endBase = tsToDate(src.taskEndTime);
+  const durationMs = endBase - startBase;
+  try {
+    for (const key of copySelectedDates) {
+      const [yy, mm, dd] = key.split("-").map(Number);
+      const newStart = new Date(yy, mm - 1, dd, startBase.getHours(), startBase.getMinutes());
+      const newEnd = new Date(newStart.getTime() + durationMs);
+      await addDoc(collection(db, COL_REQUESTS), {
+        applicantUnit: src.applicantUnit || "", applicantRank: src.applicantRank || "", applicantName: src.applicantName || "",
+        location: src.location || "",
+        taskStartTime: newStart, taskEndTime: newEnd,
+        remarks: src.remarks || "",
+        tagId: src.tagId || null, tagName: src.tagName || null, tagColor: src.tagColor || null,
+        status: src.status, assignedUnit: src.assignedUnit || null,
+        createdAt: serverTimestamp(),
+        createdBy: currentUser.uid,
+        createdByDispatcher: true,
+        reviewedBy: src.reviewedBy || null,
+        reviewedAt: src.reviewedAt || null,
+      });
+    }
+    closeCopyModal();
+  } catch (e) {
+    alert("複製失敗：" + e.message);
+    btn.disabled = false; btn.textContent = `複製到已選日期（${copySelectedDates.size}）`;
+  }
 }
 
 function watchRequestsForDispatcher() {
@@ -875,11 +1234,12 @@ function taskCardHtml(r, withDispatchActions=false, withFillAction=false) {
     actions = `<div class="actions"><button class="btn btn-small btn-blue" id="fill-${r.id}">填寫車長／駕駛</button></div>`;
   }
   return `
-    <div class="card">
+    <div class="card" data-taskid="${r.id}">
       <div class="task-top">
         <span class="id">#${(r.id||"").slice(-6).toUpperCase()}</span>
         <span class="tag ${tagClass}">${STATUS_LABEL[r.status] || r.status}${r.assignedUnit ? "・" + r.assignedUnit : ""}</span>
       </div>
+      ${r.tagName ? `<div class="tag-chip" style="--tag-color:${escapeHtml(r.tagColor || "")}">${escapeHtml(r.tagName)}</div>` : ""}
       <h3>${escapeHtml(r.location || "")}</h3>
       <p>申請單位｜${escapeHtml(r.applicantUnit || "")}</p>
       <p>申請人｜${escapeHtml(r.applicantRank || "")} ${escapeHtml(r.applicantName || "")}</p>
