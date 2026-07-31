@@ -127,6 +127,7 @@
   .color-swatches{display:flex;gap:8px;flex-wrap:wrap}
   .color-swatch{width:28px;height:28px;border-radius:50%;cursor:pointer;border:2px solid transparent}
   .color-swatch.selected{border-color:var(--text)}
+  .icon-btn{flex-shrink:0;width:32px;height:32px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);color:var(--muted);display:flex;align-items:center;justify-content:center;cursor:pointer}
 
   /* ---------- 底部彈出選單／彈窗 ---------- */
   .sheet-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:30;display:flex;align-items:flex-end;justify-content:center}
@@ -180,7 +181,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-07-31.29";
+const BUILD_VERSION = "2026-07-31.30";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -211,6 +212,7 @@ const ICON_RECORDS = `<svg viewBox="0 0 24 24" width="20" height="20" fill="none
 const ICON_MORE = `<svg viewBox="0 0 24 24" width="20" height="20" fill="none"><circle cx="5" cy="12" r="1.4" fill="currentColor"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/><circle cx="19" cy="12" r="1.4" fill="currentColor"/></svg>`;
 const ICON_LIST = `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="4.5" cy="6" r="1" fill="currentColor" stroke="none"/><circle cx="4.5" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="4.5" cy="18" r="1" fill="currentColor" stroke="none"/><path d="M9 6h11M9 12h11M9 18h11"/></svg>`;
 const ICON_CALENDAR = `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="16" rx="2"/><path d="M8 3v4M16 3v4M3.5 10h17"/></svg>`;
+const ICON_EDIT = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>`;
 
 const UNITS_INTERNAL = ["營部", "一連", "二連"];
 const STATUS_LABEL = { pending:"待審核", assigned:"已分發", filled:"已完成", rejected:"不核准" };
@@ -223,6 +225,7 @@ let unsubRequests = null;
 let activeTab = null;
 let gateErrorText = null; // 登入被擋下時要顯示的錯誤訊息（避免 signOut 觸發的重繪把訊息蓋掉）
 let availableTags = [];   // 前支種類標籤快取
+let editingTagId = null;  // 更多頁目前正在編輯（展開顏色選取）的標籤
 let unsubTags = null;
 let pickedTagId = null;   // 新增／編輯任務表單目前選取的標籤
 
@@ -756,6 +759,7 @@ let unsubInternalAccounts = null;
 const ROLE_LABEL = { dispatcher:"承辦人", battalion_hq:"營部", company1:"一連", company2:"二連", admin:"管理者" };
 
 function renderMoreView() {
+  editingTagId = null;
   if (profile.fsr_role !== "admin") {
     const c = document.getElementById("content");
     c.innerHTML = `<div class="empty">目前沒有其他設定項目</div>`;
@@ -796,12 +800,7 @@ function drawAccountsList() {
             <h3 style="margin:0 0 3px">${escapeHtml(a.rank ? a.rank + " " : "")}${escapeHtml(a.displayName || a.email || a.id)}</h3>
             <p style="margin:0">${escapeHtml(a.email || "")}</p>
           </div>
-          <select id="role-${a.id}" style="flex-shrink:0;width:auto;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12px;color:var(--text)">
-            ${Object.entries(ROLE_LABEL).map(([v,l]) => `<option value="${v}" ${a.fsr_role===v?"selected":""}>${l}</option>`).join("")}
-          </select>
-        </div>
-        <div class="actions">
-          <button class="btn btn-small btn-blue" id="saverole-${a.id}">儲存角色</button>
+          <span class="tag assigned" style="flex-shrink:0">${escapeHtml(ROLE_LABEL[a.fsr_role] || a.fsr_role)}</span>
         </div>
       </div>`).join("");
 
@@ -820,7 +819,7 @@ function drawAccountsList() {
 
   const tagListHtml = availableTags.length === 0
     ? `<div class="empty">目前還沒有標籤</div>`
-    : availableTags.map(t => `
+    : availableTags.map(t => t.id === editingTagId ? `
       <div class="card">
         <div style="display:flex;align-items:center;gap:8px">
           <span style="width:14px;height:14px;border-radius:50%;background:${escapeHtml(t.color)};flex-shrink:0"></span>
@@ -832,6 +831,15 @@ function drawAccountsList() {
         <div class="actions">
           <button class="btn btn-small btn-blue" id="savetag-${t.id}">儲存</button>
           <button class="btn btn-small btn-red" id="deltag-${t.id}">刪除標籤</button>
+        </div>
+      </div>` : `
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+          <div style="display:flex;align-items:center;gap:8px;min-width:0">
+            <span style="width:14px;height:14px;border-radius:50%;background:${escapeHtml(t.color)};flex-shrink:0"></span>
+            <h3 style="margin:0">${escapeHtml(t.name)}</h3>
+          </div>
+          <button class="icon-btn" id="edittag-${t.id}" aria-label="編輯標籤">${ICON_EDIT}</button>
         </div>
       </div>`).join("");
 
@@ -869,10 +877,6 @@ function drawAccountsList() {
     ${tagListHtml}`;
 
   document.getElementById("setRoleBtn").onclick = doSetInternalRole;
-  internalAccounts.forEach(a => {
-    const btn = document.getElementById(`saverole-${a.id}`);
-    if (btn) btn.onclick = () => saveInternalRole(a);
-  });
   applicantAccounts.forEach(a => {
     document.getElementById(`saveunit-${a.id}`).onclick = () => saveUnitName(a);
     document.getElementById(`resetpw-${a.id}`).onclick = () => sendResetPassword(a);
@@ -887,6 +891,10 @@ function drawAccountsList() {
   });
   document.getElementById("addTagBtn").onclick = () => doAddTag(() => newTagColor);
   availableTags.forEach(t => {
+    if (t.id !== editingTagId) {
+      document.getElementById(`edittag-${t.id}`).onclick = () => { editingTagId = t.id; drawAccountsList(); };
+      return;
+    }
     let editColor = t.color;
     document.querySelectorAll(`#tagcolor-${t.id} .color-swatch`).forEach(el => {
       el.onclick = () => {
@@ -894,7 +902,11 @@ function drawAccountsList() {
         document.querySelectorAll(`#tagcolor-${t.id} .color-swatch`).forEach(s => s.classList.toggle("selected", s.dataset.color === editColor));
       };
     });
-    document.getElementById(`savetag-${t.id}`).onclick = () => saveTagNow(t.id, document.getElementById(`tagname-${t.id}`).value.trim(), () => editColor);
+    document.getElementById(`savetag-${t.id}`).onclick = async () => {
+      await saveTagNow(t.id, document.getElementById(`tagname-${t.id}`).value.trim(), () => editColor);
+      editingTagId = null;
+      drawAccountsList();
+    };
     document.getElementById(`deltag-${t.id}`).onclick = () => deleteTagNow(t.id);
   });
 }
@@ -946,14 +958,6 @@ async function doSetInternalRole() {
   } catch (e) {
     msg.innerHTML = `<div class="msg error">設定失敗：${e.message}</div>`;
   }
-}
-
-async function saveInternalRole(a) {
-  const val = document.getElementById(`role-${a.id}`).value;
-  try {
-    await updateDoc(doc(db, "users", a.id), { fsr_role: val });
-    alert("已更新角色");
-  } catch (e) { alert("更新失敗：" + e.message); }
 }
 
 async function saveUnitName(a) {
