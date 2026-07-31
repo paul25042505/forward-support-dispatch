@@ -1,5 +1,89 @@
 # Firestore 安全規則補充
 
+## ⚠️ 第 5 版（目前唯一正確版本，取代下面第 1～4 版的假設）
+
+之前第 1～4 版都是假設 `medical-battalion-tracker` 的 Firestore 規則長得很單純（`users` 集合只有一個簡單的 `match` 區塊）。但 2026-07-31 晚上你貼出實際的規則後才發現：**真正在用的規則是一份非常完整、複雜的規則**（屬於「衛生營車輛人員動態管制系統」），角色欄位用的是 `role`/`unit`（不是我們的 `fsr_role`/`fsr_unitName`），而且裡面**完全沒有** `forward_support_*` 的任何內容。
+
+**重要提醒：** Firestore 規則是整份檔案覆蓋，不是合併。你的車輛人員動態管制系統只要重新部署一次自己的規則，就會把下面這段前支任務系統的規則整個蓋掉，導致前支系統又開始出現權限錯誤。**每次車輛人員系統那邊改規則、重新部署後，都要記得把下面這段補回去**，或是請維護那個系統的人（或那邊的 Claude session）以後改規則時保留這段。
+
+### 怎麼貼
+
+1. 前往 Firebase 主控台 → `medical-battalion-tracker` 專案 → Firestore Database → 規則
+2. 找到 `match /users/{uid} { ... }` 區塊裡的 `allow update` 那一段（結尾應該是 `onlyChanged(['displayName','rank','phone','emtLevel'...`），在最後一個 `||` 條件後面、右括號 `;` 之前，加上這一行（記得補上 `||`）：
+
+```
+                    || (isFsrAdmin() && onlyChanged(['fsr_role','fsr_unitName']));
+```
+
+（`allow read` 不用改，現有的 `isActive()` 已經夠寬，任何在職帳號都能讀到別人的 `users` 文件。）
+
+3. 在 `match /databases/{database}/documents { ... }` 區塊的**最後面**（例如 `campRegistrations` 那個 `match` 區塊後面、最後兩個 `}` 之前）整段貼上：
+
+```
+    // ============ 前支任務申請系統（forward_support_dispatch）============
+    // 共用本專案的 users 集合，但用 fsr_role / fsr_unitName 這兩個獨立欄位，
+    // 跟衛生營系統原本的 role / unit 完全分開，不會互相干擾。
+    function fsrRole() { return myUserDoc().fsr_role; }
+    function fsrUnitName() { return myUserDoc().fsr_unitName; }
+    function isFsrAdmin() { return isSignedIn() && fsrRole() == 'admin'; }
+    function isFsrDispatcher() { return isSignedIn() && fsrRole() in ['dispatcher', 'admin']; }
+    function isFsrApplicant() { return isSignedIn() && fsrRole() == 'applicant'; }
+    function isFsrUnitRole() { return isSignedIn() && fsrRole() in ['battalion_hq', 'company1', 'company2']; }
+    function fsrUnitLabel() {
+      return {'battalion_hq': '營部', 'company1': '一連', 'company2': '二連'}[fsrRole()];
+    }
+
+    match /forward_support_units/{unitId} {
+      allow read: if true;
+      allow create: if isSignedIn();
+      allow update, delete: if isFsrDispatcher();
+    }
+
+    match /forward_support_requests/{reqId} {
+      allow read: if isSignedIn() && (
+        isFsrDispatcher() ||
+        (isFsrApplicant() && resource.data.createdBy == request.auth.uid) ||
+        (isFsrUnitRole() && resource.data.assignedUnit == fsrUnitLabel())
+      );
+      // 兩種建立來源：承辦人/管理者自己登記（新增任務／複製到其他日期功能）；
+      // 或外部申請單位透過申請人站送出。
+      allow create: if
+        (isFsrDispatcher() && request.resource.data.createdBy == request.auth.uid
+          && request.resource.data.createdByDispatcher == true)
+        || (isFsrApplicant() && request.resource.data.createdBy == request.auth.uid
+          && request.resource.data.applicantUnit == fsrUnitName()
+          && request.resource.data.status == 'pending');
+      // 承辦人：審核／分發／駁回／編輯。各連：只能把自己被分發到的任務改成 filled。
+      allow update: if isFsrDispatcher()
+        || (isFsrUnitRole() && resource.data.assignedUnit == fsrUnitLabel()
+            && resource.data.status == 'assigned'
+            && request.resource.data.status == 'filled');
+      // 只有承辦人/管理者能刪除「自己內部建立」的任務，外部單位送來的申請不能刪除。
+      allow delete: if isFsrDispatcher() && resource.data.createdByDispatcher == true;
+    }
+
+    match /forward_support_assignments/{aId} {
+      allow read: if isFsrDispatcher() || isFsrUnitRole();
+      allow create: if isFsrUnitRole()
+        && request.resource.data.unit == fsrUnitLabel()
+        && request.resource.data.filledBy == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    match /forward_support_tags/{tagId} {
+      allow read: if isFsrDispatcher();
+      allow write: if isFsrAdmin();
+    }
+```
+
+貼完兩處後按「發布」。這樣就涵蓋：登入角色判斷、任務讀寫、承辦人自建任務、複製到其他日期、編輯、刪除、標籤系統、單位帳號與內部人員角色設定（透過 `users/{uid}` 那行 `fsr_role`/`fsr_unitName` 的放行）。
+
+---
+
+## 第 1～4 版（歷史記錄，已被第 5 版取代，僅供參考）
+
+以下內容是根據錯誤假設（以為 `medical-battalion-tracker` 的規則很單純）寫的，**不要照著貼**，已經不適用實際的規則結構。保留在這裡只是留個紀錄。
+
 這份規則要**加進**衛生營系統（medical-battalion-tracker）現有的 `firestore.rules` 裡（Firebase 主控台 → Firestore Database → 規則），不要整份覆蓋掉，找到 `match /databases/{database}/documents { ... }` 區塊，在裡面加入以下 `match` 區段即可，不動到原本衛生營的規則。
 
 ```
