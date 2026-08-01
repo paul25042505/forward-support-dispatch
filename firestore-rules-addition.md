@@ -168,6 +168,24 @@
 
 貼上後按「發布」。
 
+### 2026-08-01 新增：申請單位自己可以編輯級職／姓名／手機號碼
+
+「更多」頁新增了「單位資料」分頁（申請單位登入後看得到），讓申請單位自己能改承辦人級職／姓名／手機號碼，不用每次都麻煩管理者代改。原本 `forward_support_applicant_profiles` 的 `allow update` 只放行 `isFsrAdmin()`，申請單位自己完全不能寫，需要放寬。
+
+找到 `match /forward_support_applicant_profiles/{uid} { ... }` 這個區塊，把這一行：
+```
+      allow update: if isFsrAdmin();
+```
+改成：
+```
+      allow update: if isFsrAdmin()
+        || (isSignedIn() && request.auth.uid == uid
+            && onlyChanged(['contactRank', 'contactName', 'contactPhone']));
+```
+（只放行這三個欄位，申請單位自己不能改 `fsr_role`／`fsr_unitName`／`email`／`unitCode` 這些權限或身分相關欄位，改單位全銜還是要透過管理者的「更多」頁編輯。）
+
+貼上後按「發布」。
+
 ---
 
 ## 第 1～4 版（歷史記錄，已被第 5 版取代，僅供參考）

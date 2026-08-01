@@ -180,7 +180,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/fireba
 import {
   getAuth, onAuthStateChanged, signInWithPopup, signInWithRedirect, getRedirectResult,
   GoogleAuthProvider, signOut,
-  createUserWithEmailAndPassword, signInWithEmailAndPassword
+  createUserWithEmailAndPassword, signInWithEmailAndPassword,
+  EmailAuthProvider, reauthenticateWithCredential, updatePassword
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   getFirestore, doc, getDoc, getDocs, addDoc, setDoc, updateDoc, deleteDoc, collection,
@@ -199,7 +200,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-08-01.34";
+const BUILD_VERSION = "2026-08-01.35";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -241,6 +242,7 @@ const ICON_TAG_CAT = `<svg viewBox="0 0 24 24" width="26" height="26" fill="none
 const ICON_PRESET = `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 2.6 5.6 6.1.7-4.5 4.2 1.2 6-5.4-3-5.4 3 1.2-6-4.5-4.2 6.1-.7Z"/></svg>`;
 const ICON_SHARE = `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4M8 8l4-4 4 4"/><path d="M4 13v6a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6"/></svg>`;
 const ICON_PREVIEW = `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>`;
+const ICON_PROFILE = `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/></svg>`;
 
 const STATUS_LABEL = { pending:"待審核", reviewing:"審核中，待收公文", approved:"已核定，等待派遣人員", assigned:"已核定", filled:"已派遣", rejected:"不核准" };
 
@@ -1178,7 +1180,6 @@ function drawAccountsList() {
     ? `<div class="empty">目前還沒有申請單位帳號</div>`
     : applicantAccounts.map(a => a.id === editingApplicantId ? `
       <div class="card">
-        <p style="margin:0 0 10px">Email｜${escapeHtml(a.email || "")}</p>
         <div class="field"><label>單位名稱</label><input id="unitname-${a.id}" value="${escapeHtml(a.fsr_unitName || "")}"></div>
         <div class="actions">
           <button class="btn btn-small btn-blue" id="saveunit-${a.id}">儲存</button>
@@ -1188,8 +1189,7 @@ function drawAccountsList() {
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
           <div style="min-width:0">
-            <h3 style="margin:0 0 3px">${escapeHtml(a.fsr_unitName || "（未設定單位名稱）")}</h3>
-            <p style="margin:0">Email｜${escapeHtml(a.email || "")}</p>
+            <h3 style="margin:0">${escapeHtml(a.fsr_unitName || "（未設定單位名稱）")}</h3>
           </div>
           <button class="icon-btn" id="editunit-${a.id}" aria-label="編輯單位名稱" style="flex-shrink:0">${ICON_EDIT}</button>
         </div>
@@ -2087,6 +2087,7 @@ function renderApplicantShell() {
     <div class="tabbar">
       <button class="item" data-asection="submit">${ICON_TASKS}送出申請</button>
       <button class="item" data-asection="mine">${ICON_RECORDS}我的申請</button>
+      <button class="item" data-asection="profile">${ICON_PROFILE}單位資料</button>
     </div>`;
   bindLogout();
   document.querySelectorAll(".tabbar [data-asection]").forEach(el => el.onclick = () => { applicantSection = el.dataset.asection; renderApplicantSection(); });
@@ -2096,7 +2097,63 @@ function renderApplicantShell() {
 function renderApplicantSection() {
   document.querySelectorAll(".tabbar .item[data-asection]").forEach(el => el.classList.toggle("active", el.dataset.asection === applicantSection));
   if (applicantSection === "submit") renderApplicantSubmitView();
-  else renderApplicantMineView();
+  else if (applicantSection === "mine") renderApplicantMineView();
+  else renderApplicantProfileView();
+}
+
+function renderApplicantProfileView() {
+  const c = document.getElementById("content");
+  c.innerHTML = `
+    <div id="applicantProfileMsg"></div>
+    <div class="section-lbl">單位資料</div>
+    <div class="card">
+      <div class="field"><label>承辦人級職</label>
+        <select id="apfRank">
+          ${RANK_OPTIONS.map(r => `<option value="${r}"${r === profile.contactRank ? " selected" : ""}>${r}</option>`).join("")}
+        </select>
+      </div>
+      <div class="field"><label>承辦人姓名</label><input id="apfName" value="${escapeHtml(profile.contactName || "")}"></div>
+      <div class="field"><label>承辦人手機號碼</label><input id="apfPhone" type="tel" value="${escapeHtml(profile.contactPhone || "")}"></div>
+      <button class="btn btn-primary" id="apfSaveBtn">儲存</button>
+    </div>
+
+    <div class="section-lbl" style="margin-top:22px">修改密碼</div>
+    <div class="card">
+      <div class="field"><label>目前密碼</label><input id="apfCurrentPassword" type="password"></div>
+      <div class="field"><label>新密碼（至少 6 碼）</label><input id="apfNewPassword" type="password"></div>
+      <button class="btn btn-primary" id="apfChangePwBtn">修改密碼</button>
+    </div>`;
+  document.getElementById("apfSaveBtn").onclick = saveApplicantProfile;
+  document.getElementById("apfChangePwBtn").onclick = changeApplicantPassword;
+}
+
+async function saveApplicantProfile() {
+  const msg = document.getElementById("applicantProfileMsg");
+  const rank = document.getElementById("apfRank").value.trim();
+  const name = document.getElementById("apfName").value.trim();
+  const phone = document.getElementById("apfPhone").value.trim();
+  if (!rank || !name || !phone) { msg.innerHTML = `<div class="msg error">請完整填寫必填欄位</div>`; return; }
+  try {
+    await updateDoc(doc(db, COL_APPLICANT_PROFILES, currentUser.uid), { contactRank: rank, contactName: name, contactPhone: phone });
+    profile.contactRank = rank; profile.contactName = name; profile.contactPhone = phone;
+    msg.innerHTML = `<div class="msg ok">已儲存</div>`;
+  } catch (e) { msg.innerHTML = `<div class="msg error">儲存失敗：${e.message}</div>`; }
+}
+
+async function changeApplicantPassword() {
+  const msg = document.getElementById("applicantProfileMsg");
+  const currentPassword = document.getElementById("apfCurrentPassword").value;
+  const newPassword = document.getElementById("apfNewPassword").value;
+  if (!currentPassword || !newPassword) { msg.innerHTML = `<div class="msg error">請輸入目前密碼與新密碼</div>`; return; }
+  if (newPassword.length < 6) { msg.innerHTML = `<div class="msg error">新密碼至少需要 6 碼</div>`; return; }
+  try {
+    const credential = EmailAuthProvider.credential(currentUser.email, currentPassword);
+    await reauthenticateWithCredential(currentUser, credential);
+    await updatePassword(currentUser, newPassword);
+    document.getElementById("apfCurrentPassword").value = "";
+    document.getElementById("apfNewPassword").value = "";
+    msg.innerHTML = `<div class="msg ok">密碼已修改</div>`;
+  } catch (e) { msg.innerHTML = `<div class="msg error">修改失敗：${applicantAuthErrorText(e)}</div>`; }
 }
 
 function renderApplicantSubmitView() {
