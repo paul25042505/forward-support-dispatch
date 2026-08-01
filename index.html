@@ -188,7 +188,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-08-01.7";
+const BUILD_VERSION = "2026-08-01.8";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -436,11 +436,20 @@ async function doApplicantRegister() {
       msg.innerHTML = `<div class="msg error">這個單位代碼已經註冊過了，請直接登入</div>`;
       return;
     }
+    const email = unitCodeToEmail(code);
     suppressAuthGate = true;
-    cred = await createUserWithEmailAndPassword(auth, unitCodeToEmail(code), password);
+    try {
+      cred = await createUserWithEmailAndPassword(auth, email, password);
+    } catch (createErr) {
+      if (createErr.code !== "auth/email-already-in-use") throw createErr;
+      // 單位目錄裡沒有這筆，但帳號已經存在：多半是規則還沒貼好時，
+      // 上次註冊建到一半失敗留下的孤兒帳號。用剛輸入的密碼試著登入接手，
+      // 而不是直接當成別人已經註冊過而擋掉。
+      cred = await signInWithEmailAndPassword(auth, email, password);
+    }
     currentUser = cred.user;
     const newProfile = {
-      email: unitCodeToEmail(code), fsr_role: "applicant", fsr_unitName: unitName,
+      email, fsr_role: "applicant", fsr_unitName: unitName,
       unitCode: code, contactRank: rank, contactName: name, createdAt: serverTimestamp(),
     };
     await setDoc(doc(db, "users", cred.user.uid), newProfile);
