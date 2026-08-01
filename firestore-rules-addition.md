@@ -96,7 +96,7 @@
 
 貼上後按「發布」即可，不用動到其他部分。
 
-### ⚠️ 2026-08-01 新增：申請單位站（外部單位自行註冊／登入）—— 這段比較重要，牽涉到 `users` 集合
+### ⚠️ 2026-08-01 新增：申請單位站（外部單位自行註冊／登入）
 
 前支任務系統現在有了外部申請單位自己的登入頁：**第一次用「單位代碼＋單位全銜＋承辦人資訊＋密碼」註冊**，之後**選單位＋輸入密碼登入**。技術上是用 Firebase Auth 的 Email/Password 登入方式，把「單位代碼」轉成一個內部合成的 email（例如 `a123@fsr.local`），不是申請單位真正的信箱。
 
@@ -107,30 +107,25 @@
    - 找到 **Email/Password**，點進去開啟（Enable），儲存
    - 如果沒開這個，申請單位註冊/登入時會看到「系統尚未開通申請單位登入方式」的錯誤
 
-**2. 規則要新增一小段，讓申請單位能自己建立 `users/{uid}` 這份文件**
+**2. 規則要新增一個獨立的集合給申請單位專用**
 
-這段比較敏感，因為 `users` 集合是跟衛生營車輛人員系統共用的，所以我刻意把新增的權限縮到最小：**只允許使用者幫自己（`request.auth.uid == uid`）建立一份 `fsr_role` 剛好是 `'applicant'` 的文件，而且完全不能同時夾帶衛生營系統自己的 `role`／`unit` 欄位**，不會有辦法透過這個路徑幫自己生出衛生營系統那邊的高權限帳號。
+（⚠️ 2026-08-01 更正第二版：一開始是讓申請單位跟衛生營人員共用同一個 `users` 集合，只用 `fsr_role` 欄位區分，結果混進了內部人員用的查詢/下拉選單裡，要一直額外過濾。改成申請單位資料完全搬到自己專屬的 `forward_support_applicant_profiles` 集合，不再跟 `users` 有任何關係，也更安全——不用再擔心新規則不小心影響到衛生營系統自己的帳號權限。**如果你之前已經貼過舊版（`isFsrSelfSignup` 那段、加在 `match /users/{uid}` 的 `allow create` 裡），可以直接刪掉那兩處，不會再用到，留著也不會壞掉、只是多餘。**）
 
-找到 `forward_support_*` 那個 functions 區塊（`fsrRole()`、`isFsrAdmin()` 那幾行），加上這個新 function：
+在 `match /databases/{database}/documents { ... }` 區塊的**最後面**（例如 `forward_support_task_presets` 那個 `match` 區塊後面、最後兩個 `}` 之前）加上：
 
 ```
-    function isFsrSelfSignup(targetUid) {
-      return isSignedIn() && request.auth.uid == targetUid
-        && request.resource.data.fsr_role == 'applicant'
-        && !('role' in request.resource.data)
-        && !('unit' in request.resource.data);
+    match /forward_support_applicant_profiles/{uid} {
+      allow read: if isFsrDispatcher() || (isSignedIn() && request.auth.uid == uid);
+      allow create: if isSignedIn() && request.auth.uid == uid
+        && request.resource.data.fsr_role == 'applicant';
+      allow update: if isFsrAdmin();
+      allow delete: if false;
     }
 ```
 
-（⚠️ 2026-08-01 更正：一開始這個 function 寫成 `isFsrSelfSignup()`、內部直接比對 `request.auth.uid == uid`，看起來會用到 `match /users/{uid}` 那個路徑變數 `uid`——但 Firestore 規則裡的 function 有自己獨立的作用域，看不到外面 `match` 區塊抓到的路徑變數，除非明確當參數傳進去。原本那個寫法會讓 `uid` 一直是「沒定義」，導致整個判斷式永遠是 false、規則形同虛設，實測會一直卡在 `Missing or insufficient permissions`。已經改成用參數 `targetUid` 傳入，呼叫的地方也要記得帶參數，見下面。如果你已經貼過舊版，要連這個 function 一起換掉。）
+貼上後按「發布」。`forward_support_units`（單位代碼目錄）跟 `forward_support_requests`（申請單位送出任務）用的規則，第 5 版都已經涵蓋了，不用再改。
 
-然後找到 `match /users/{uid} { ... }` 區塊裡的 `allow create` 那一段（結尾應該類似 `... && sameUnit(request.resource.data.unit))));`），在最後一個 `||` 條件後面、右括號 `;` 之前，加上這一行（記得補上 `||`，而且要帶 `uid` 這個參數）：
-
-```
-                    || isFsrSelfSignup(uid);
-```
-
-貼完兩處後按「發布」。`forward_support_units`（單位代碼目錄）跟 `forward_support_requests`（申請單位送出任務）用的規則，第 5 版都已經涵蓋了，不用再改。
+**⚠️ 舊測試帳號要重新註冊：** 如果你之前已經用單位代碼（例如 38724）測試註冊過，那筆資料是寫在舊的 `users` 集合裡，這次搬到新集合後系統找不到、視同沒註冊過。貼完這次的規則後，直接用同一組代碼＋密碼再走一次「註冊」流程就會建到新集合裡（Firebase Auth 帳號本來就存在，會自動接手，不用改用別的代碼）。
 
 **已知限制：** 「更多」頁申請單位卡片上的「寄送重設密碼信」按鈕，是很早之前假設申請單位有真實信箱時做的，現在申請單位用的是假的 `@fsr.local` 信箱，那封信會寄到一個不存在的地方、對方永遠收不到。如果之後需要「幫申請單位重設密碼」，需要另外做（例如 Cloud Functions + Firebase Admin SDK 才能改別人的密碼，用目前的環境做不到），先讓管理者知道這個按鈕對申請單位帳號目前是無效的。
 
