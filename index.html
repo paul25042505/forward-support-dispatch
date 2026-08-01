@@ -199,7 +199,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-08-01.31";
+const BUILD_VERSION = "2026-08-01.32";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -242,7 +242,17 @@ const ICON_PRESET = `<svg viewBox="0 0 24 24" width="26" height="26" fill="none"
 const ICON_SHARE = `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4M8 8l4-4 4 4"/><path d="M4 13v6a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6"/></svg>`;
 const ICON_PREVIEW = `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>`;
 
-const STATUS_LABEL = { pending:"待審核", reviewing:"審核中，待收公文", approved:"已核定，等待派遣人員", assigned:"已派遣", filled:"任務完成", rejected:"不核准" };
+const STATUS_LABEL = { pending:"待審核", reviewing:"審核中，待收公文", approved:"已核定，等待派遣人員", assigned:"已核定", filled:"已派遣", rejected:"不核准" };
+
+// 已派遣（調度員已填好車長／駕駛）的任務，若任務時間已經過了，顯示上改叫「任務完成」，
+// 但底層 status 欄位維持 "filled" 不變，不需要額外的狀態或 Firestore 規則異動。
+function statusDisplayLabel(r) {
+  if (r.status === "filled") {
+    const end = r.taskEndTime && (r.taskEndTime.toDate ? r.taskEndTime.toDate() : new Date(r.taskEndTime));
+    if (end && end < new Date()) return "任務完成";
+  }
+  return STATUS_LABEL[r.status] || r.status;
+}
 const VALID_INTERNAL_ROLES = ["dispatcher", "battalion_hq", "company1", "company2", "admin"];
 const RANK_OPTIONS = ["中校","少校","上尉","中尉","少尉","士官長","上士","中士","下士","上等兵","一等兵","二等兵"];
 
@@ -708,8 +718,8 @@ function renderDispatcherContent() {
     { key:"pending", cls:"amber", label:"待審核", n:counts.pending },
     { key:"reviewing", cls:"purple", label:"審核中", n:counts.reviewing },
     { key:"approved", cls:"cyan", label:"已核定", n:counts.approved },
-    { key:"assigned", cls:"blue", label:"已派遣", n:counts.assigned },
-    { key:"filled", cls:"green", label:"任務完成", n:counts.filled },
+    { key:"assigned", cls:"blue", label:"調度中", n:counts.assigned },
+    { key:"filled", cls:"green", label:"已派遣", n:counts.filled },
     { key:"all", cls:"gray", label:"全部", n:allRequests.length },
   ];
   const statsHtml = `
@@ -2191,7 +2201,7 @@ function taskCardHtml(r, withDispatchActions=false, withFillAction=false) {
     <div class="card" data-taskid="${r.id}">
       <div class="task-top">
         <span class="id">#${(r.id||"").slice(-6).toUpperCase()}</span>
-        <span class="tag ${tagClass}">${STATUS_LABEL[r.status] || r.status}${r.assignedUnit ? "・" + r.assignedUnit : ""}</span>
+        <span class="tag ${tagClass}">${statusDisplayLabel(r)}${r.assignedUnit ? "・" + r.assignedUnit : ""}</span>
       </div>
       ${r.tagName ? `<div class="tag-chip" style="--tag-color:${escapeHtml(r.tagColor || "")}">${escapeHtml(r.tagName)}</div>` : ""}
       <h3>${escapeHtml(r.taskName || r.location || "")}</h3>
