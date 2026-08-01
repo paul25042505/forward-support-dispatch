@@ -192,7 +192,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-08-01.15";
+const BUILD_VERSION = "2026-08-01.16";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -1055,7 +1055,7 @@ async function renderAccountsView() {
     const psnap = await getDocs(collection(db, "users"));
     allPersonnel = psnap.docs
       .map(d => ({ id: d.id, ...d.data() }))
-      .filter(u => u.role !== "unclaimed")
+      .filter(u => u.role !== "unclaimed" && u.fsr_role !== "applicant")
       .sort((a, b) => rankWeight(a.rank) - rankWeight(b.rank) || (a.displayName || "").localeCompare(b.displayName || "", "zh-Hant"));
   } catch (e) {
     allPersonnel = [];
