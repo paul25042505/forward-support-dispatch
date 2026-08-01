@@ -240,6 +240,23 @@
 
 貼上後按「發布」。
 
+### 2026-08-01 新增：管理員可以刪除申請單位帳號
+
+「更多→帳號管理」的申請單位帳號卡片新增「刪除帳號」按鈕。原本 `forward_support_applicant_profiles` 完全不開放刪除（`allow delete: if false;`），需要放寬給管理員。
+
+找到 `match /forward_support_applicant_profiles/{uid} { ... }` 這個區塊，把這一行：
+```
+      allow delete: if false;
+```
+改成：
+```
+      allow delete: if isFsrAdmin();
+```
+
+貼上後按「發布」。（`forward_support_units` 單位代碼目錄的刪除權限第 5 版就已經開放給 `isFsrDispatcher()`，這次刪除帳號時會一併刪掉對應的單位代碼目錄項目，不用再改。）
+
+**已知限制：** 刪除只會清掉 Firestore 裡的申請單位資料（`forward_support_applicant_profiles` 跟 `forward_support_units` 目錄項目），底層的 Firebase Auth 帳號本身不會被刪除（用目前的環境做不到，需要 Cloud Functions + Admin SDK）。實際效果等同於帳號失效：對方原本的登入密碼還在，但登入後系統找不到 profile 資料，會被導去「請重新註冊」，等於要重新走一次註冊流程才能再使用。
+
 ---
 
 ## 第 1～4 版（歷史記錄，已被第 5 版取代，僅供參考）
