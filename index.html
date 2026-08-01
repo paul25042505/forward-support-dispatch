@@ -188,7 +188,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-08-01.10";
+const BUILD_VERSION = "2026-08-01.11";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -1589,8 +1589,8 @@ function renderApplicantSubmitView() {
   c.innerHTML = `
     <div id="applicantCreateMsg"></div>
     <div class="field"><label>任務名稱</label><input id="apTaskName" placeholder="例：成功嶺鑑測站"></div>
-    <div class="field"><label>承辦人級職（選填）</label><input id="apRank" value="${escapeHtml(profile.contactRank || "")}"></div>
-    <div class="field"><label>承辦人姓名（選填）</label><input id="apName" value="${escapeHtml(profile.contactName || "")}"></div>
+    <div class="field"><label>承辦人級職</label><input id="apRank" value="${escapeHtml(profile.contactRank || "")}"></div>
+    <div class="field"><label>承辦人姓名</label><input id="apName" value="${escapeHtml(profile.contactName || "")}"></div>
     <div class="field"><label>任務地點</label><input id="apLoc" placeholder="請輸入地點"></div>
     <div class="field"><label>開始時間</label>
       <div class="row2"><input id="apStartDate" type="date"><select id="apStartTime">${halfHourTimeOptionsHtml("")}</select></div>
@@ -1614,7 +1614,7 @@ async function doApplicantSubmit() {
   const endDate = document.getElementById("apEndDate").value;
   const endTime = document.getElementById("apEndTime").value;
   const remarks = document.getElementById("apRemarks").value.trim();
-  if (!taskName || !loc || !startDate || !startTime || !endDate || !endTime) {
+  if (!taskName || !rank || !name || !loc || !startDate || !startTime || !endDate || !endTime) {
     msg.innerHTML = `<div class="msg error">請完整填寫必填欄位</div>`; return;
   }
   try {
