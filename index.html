@@ -200,7 +200,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-08-01.39";
+const BUILD_VERSION = "2026-08-01.40";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -1233,9 +1233,14 @@ function drawAccountsList() {
     <div class="section-lbl">外部單位忘記密碼聯絡窗口</div>
     <div class="card">
       <div id="contactMsg"></div>
-      <p style="font-size:11px;color:var(--muted);margin:0 0 10px">申請單位在登入頁點「忘記密碼」時，會看到這裡填寫的內容，請對方直接聯絡處理。</p>
-      <div class="field"><label>級職</label><input id="contactRank" value="${escapeHtml(forgotPasswordContact.rank || "")}"></div>
-      <div class="field"><label>姓名</label><input id="contactName" value="${escapeHtml(forgotPasswordContact.name || "")}"></div>
+      <p style="font-size:11px;color:var(--muted);margin:0 0 10px">申請單位在登入頁點「忘記密碼」時，會看到這裡選的業務承辦人（級職／姓名依照下面「已設定的內部人員」自動帶出，不用手動打字）跟電話。</p>
+      <div class="field"><label>業務承辦人</label>
+        <select id="contactDispatcherUid">
+          <option value="">請選擇業務承辦人</option>
+          ${internalAccounts.filter(a => a.fsr_role === "dispatcher").map(a => `<option value="${a.id}"${a.id === forgotPasswordContact.uid ? " selected" : ""}>${escapeHtml(a.rank ? a.rank + " " : "")}${escapeHtml(a.displayName || a.email || a.id)}</option>`).join("")}
+        </select>
+        ${internalAccounts.filter(a => a.fsr_role === "dispatcher").length === 0 ? `<p style="font-size:11px;color:var(--muted);margin:6px 0 0">目前還沒有人被設定「業務承辦人」角色，請先在下面「設定內部人員角色」指派。</p>` : ""}
+      </div>
       <div class="field"><label>單位民線</label><input id="contactPhoneCivilian" type="tel" value="${escapeHtml(forgotPasswordContact.phoneCivilian || "")}"></div>
       <div class="field"><label>單位軍線</label><input id="contactPhoneMilitary" type="tel" value="${escapeHtml(forgotPasswordContact.phoneMilitary || "")}"></div>
       <button class="btn btn-primary" id="saveContactBtn">儲存</button>
@@ -1584,13 +1589,17 @@ async function deleteInternalRoleNow(a) {
 
 async function saveForgotPasswordContact() {
   const msg = document.getElementById("contactMsg");
-  const rank = document.getElementById("contactRank").value.trim();
-  const name = document.getElementById("contactName").value.trim();
+  const uid = document.getElementById("contactDispatcherUid").value;
+  if (!uid) { msg.innerHTML = `<div class="msg error">請選擇業務承辦人</div>`; return; }
+  const person = internalAccounts.find(a => a.id === uid);
+  if (!person) { msg.innerHTML = `<div class="msg error">找不到這個人員，請重新整理後再試</div>`; return; }
+  const rank = person.rank || "";
+  const name = person.displayName || person.email || "";
   const phoneCivilian = document.getElementById("contactPhoneCivilian").value.trim();
   const phoneMilitary = document.getElementById("contactPhoneMilitary").value.trim();
   try {
-    await setDoc(doc(db, COL_CONTACT, "main"), { rank, name, phoneCivilian, phoneMilitary });
-    forgotPasswordContact = { rank, name, phoneCivilian, phoneMilitary };
+    await setDoc(doc(db, COL_CONTACT, "main"), { uid, rank, name, phoneCivilian, phoneMilitary });
+    forgotPasswordContact = { uid, rank, name, phoneCivilian, phoneMilitary };
     msg.innerHTML = `<div class="msg ok">已儲存</div>`;
   } catch (e) { msg.innerHTML = `<div class="msg error">儲存失敗：${e.message}</div>`; }
 }
