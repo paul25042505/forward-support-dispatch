@@ -195,7 +195,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-08-01.25";
+const BUILD_VERSION = "2026-08-01.26";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -1803,9 +1803,17 @@ function fillPersonnelPool(crossUnit) {
   return crossUnit ? fillAllPersonnel : fillAllPersonnel.filter(u => u.unit === fillOwnUnit);
 }
 
-function personnelOptionHtml(u, crossUnit) {
-  const unitSuffix = crossUnit ? `（${REAL_UNIT_LABEL[u.unit] || u.unit}）` : "";
-  return `<option value="${u.id}" data-rank="${escapeHtml(u.rank || "")}" data-name="${escapeHtml(u.displayName || "")}">${escapeHtml(u.rank || "")} ${escapeHtml(u.displayName || "")}${unitSuffix}</option>`;
+function personnelOptionHtml(u) {
+  return `<option value="${u.id}" data-rank="${escapeHtml(u.rank || "")}" data-name="${escapeHtml(u.displayName || "")}">${escapeHtml(u.rank || "")} ${escapeHtml(u.displayName || "")}</option>`;
+}
+
+function groupedPersonnelOptionsHtml(pool, crossUnit) {
+  if (!crossUnit) return pool.map(personnelOptionHtml).join("");
+  return Object.keys(REAL_UNIT_LABEL).map(unitKey => {
+    const group = pool.filter(u => u.unit === unitKey);
+    if (group.length === 0) return "";
+    return `<optgroup label="${escapeHtml(REAL_UNIT_LABEL[unitKey])}">${group.map(personnelOptionHtml).join("")}</optgroup>`;
+  }).join("");
 }
 
 function renderFillPersonnelOptions(presetCommanderId, presetDriverId, crossUnit) {
@@ -1815,8 +1823,8 @@ function renderFillPersonnelOptions(presetCommanderId, presetDriverId, crossUnit
   const keepDriver = presetDriverId !== undefined ? presetDriverId : driverSel.value;
   const pool = fillPersonnelPool(crossUnit);
   const commanderPool = pool.filter(u => !SOLDIER_RANKS.includes(u.rank));
-  commanderSel.innerHTML = `<option value="">請選擇</option>` + commanderPool.map(u => personnelOptionHtml(u, crossUnit)).join("");
-  driverSel.innerHTML = `<option value="">請選擇</option>` + pool.map(u => personnelOptionHtml(u, crossUnit)).join("");
+  commanderSel.innerHTML = `<option value="">請選擇</option>` + groupedPersonnelOptionsHtml(commanderPool, crossUnit);
+  driverSel.innerHTML = `<option value="">請選擇</option>` + groupedPersonnelOptionsHtml(pool, crossUnit);
   if (keepCommander && commanderPool.some(u => u.id === keepCommander)) commanderSel.value = keepCommander;
   if (keepDriver && pool.some(u => u.id === keepDriver)) driverSel.value = keepDriver;
 }
