@@ -205,7 +205,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-08-01.44";
+const BUILD_VERSION = "2026-08-01.45";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -845,7 +845,7 @@ function renderCalendarView() {
     return;
   }
   listEl.innerHTML = `<div class="section-lbl">${selectedCalendarDate} ・ 共 ${list.length} 筆</div>` +
-    list.map(r => taskCardHtml(r, ["pending","reviewing","approved","assigned"].includes(r.status))).join("");
+    list.map(r => taskCardHtml(r, ["pending","reviewing","approved","assigned","filled"].includes(r.status))).join("");
   bindCardMenu(listEl);
   list.forEach(r => {
     const reviewBtn = document.getElementById(`review-${r.id}`);
@@ -1669,23 +1669,36 @@ function closeAssignPrompt() {
   assignTargetTask = null;
 }
 
+// 換單位／取消分發時，把舊單位填過的車長／駕駛／證照／電話／車號這些
+// 卡片上顯示用的欄位一併清掉——新單位還沒重新填寫，繼續顯示舊單位的人
+// 會誤導。原本存在 forward_support_assignments 的歷史紀錄不會刪除
+// （規則本來就不允許刪除），只是任務卡片不再顯示。
+const CLEARED_FILL_FIELDS = {
+  commanderRank: null, commanderName: null, commanderPhone: null, commanderEmtLevel: null,
+  driverRank: null, driverName: null, driverPhone: null, driverEmtLevel: null,
+  vehicleNumber: null,
+};
+
 async function doAssignConfirm() {
   const r = assignTargetTask;
   if (!r) return;
   const choice = document.getElementById("assignUnitSelect").value;
+  if (r.status === "filled" && !confirm(`這筆任務已經有車長／駕駛資料，換單位給「${choice}」後會清空，改由新單位重新填寫，確定要換嗎？`)) return;
   try {
     await updateDoc(doc(db, COL_REQUESTS, r.id), {
       status: "assigned", assignedUnit: choice,
       reviewedBy: currentUser.uid, reviewedAt: serverTimestamp(),
+      ...CLEARED_FILL_FIELDS,
     });
     closeAssignPrompt();
   } catch (e) { alert("派遣失敗：" + e.message); }
 }
 
 async function cancelDispatch(r) {
-  if (!confirm(`確定要取消分發給「${r.assignedUnit || ""}」嗎？任務會退回「已核定，等待派遣人員」狀態。`)) return;
+  const extraWarning = r.status === "filled" ? "已經填寫的車長／駕駛資料也會一併清空。" : "";
+  if (!confirm(`確定要取消分發給「${r.assignedUnit || ""}」嗎？任務會退回「已核定，等待派遣人員」狀態。${extraWarning}`)) return;
   try {
-    await updateDoc(doc(db, COL_REQUESTS, r.id), { status: "approved", assignedUnit: null });
+    await updateDoc(doc(db, COL_REQUESTS, r.id), { status: "approved", assignedUnit: null, ...CLEARED_FILL_FIELDS });
   } catch (e) { alert("操作失敗：" + e.message); }
 }
 
@@ -1909,7 +1922,11 @@ async function openFillForm(r, roleKey = profile.fsr_role) {
 async function openEditFillForm(r, roleKey = profile.fsr_role) {
   let aDoc;
   try {
-    const snap = await getDocs(query(collection(db, COL_ASSIGNMENTS), where("requestId", "==", r.id)));
+    // 只找目前指派單位自己的紀錄：任務如果曾經「換單位」，同一筆
+    // requestId 底下可能留有別的（舊）單位填過的歷史紀錄，只用
+    // requestId 查會不小心挑到不是目前這個單位的那筆。
+    const snap = await getDocs(query(collection(db, COL_ASSIGNMENTS),
+      where("requestId", "==", r.id), where("unit", "==", unitKeyToLabel(roleKey))));
     if (snap.empty) { alert("找不到填寫紀錄"); return; }
     aDoc = snap.docs[0];
   } catch (e) { alert("讀取失敗：" + e.message); return; }
@@ -2339,6 +2356,12 @@ function taskCardHtml(r, withDispatchActions=false, withFillAction=false) {
   }
   if (withFillAction && r.status === "filled") {
     actions = `<div class="actions"><button class="btn btn-small btn-outline" id="editfill-${r.id}">編輯車長／駕駛</button></div>`;
+  }
+  if (withDispatchActions && r.status === "filled") {
+    actions = `<div class="actions">
+      <button class="btn btn-small btn-outline" id="changeunit-${r.id}">換單位</button>
+      <button class="btn btn-small btn-red" id="cancelassign-${r.id}">取消分發</button>
+    </div>`;
   }
   if (!withFillAction && !withDispatchActions && r.status === "assigned") {
     actions = `<div class="actions"><span class="muted-note">等待派遣人員填寫車長／駕駛</span></div>`;
