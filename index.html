@@ -195,7 +195,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-08-01.24";
+const BUILD_VERSION = "2026-08-01.25";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -1838,7 +1838,7 @@ async function openFillSheet(r, existingDoc, roleKey) {
     ]);
     fillAllPersonnel = uSnap.docs
       .map(d => ({ id: d.id, ...d.data() }))
-      .filter(u => !["unclaimed", "pending", "disabled"].includes(u.role))
+      .filter(u => !["unclaimed", "pending", "disabled"].includes(u.role) && u.rank && u.displayName && u.unit)
       .sort((x, y) => rankWeight(x.rank) - rankWeight(y.rank) || (x.displayName || "").localeCompare(y.displayName || "", "zh-Hant"));
     vehicles = vSnap.docs.map(d => ({ id: d.id, ...d.data() }));
   } catch (e) { /* 查無資料時仍顯示空白下拉選單 */ }
@@ -1847,7 +1847,7 @@ async function openFillSheet(r, existingDoc, roleKey) {
   const vehicleOptionHtml = vehicleLabels.map(label => `<option value="${escapeHtml(label)}">${escapeHtml(label)}</option>`).join("");
   const existingVehicleKnown = a.vehicleNumber && vehicleLabels.includes(a.vehicleNumber);
 
-  const matchInAll = (rank, name) => fillAllPersonnel.find(u => u.rank === rank && u.displayName === name);
+  const matchInAll = (rank, name) => (rank && name) ? fillAllPersonnel.find(u => u.rank === rank && u.displayName === name) : undefined;
   const cmdMatch = matchInAll(a.vehicleCommanderRank, a.vehicleCommanderName);
   const drvMatch = matchInAll(a.driverRank, a.driverName);
   const needsCrossUnit = (cmdMatch && cmdMatch.unit !== fillOwnUnit) || (drvMatch && drvMatch.unit !== fillOwnUnit);
