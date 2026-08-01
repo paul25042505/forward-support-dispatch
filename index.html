@@ -195,7 +195,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-08-01.27";
+const BUILD_VERSION = "2026-08-01.28";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -1808,8 +1808,16 @@ function fillPersonnelPool(crossUnit) {
   return crossUnit ? fillAllPersonnel : fillAllPersonnel.filter(u => u.unit === fillOwnUnit);
 }
 
+function vehicleSortKey(label) {
+  const m = label.match(/\d+/);
+  return m ? parseInt(m[0], 10) : Infinity;
+}
+
 function fillVehiclePool(crossUnit) {
-  return crossUnit ? fillAllVehicles : fillAllVehicles.filter(v => v.unit === fillOwnUnit);
+  const base = crossUnit ? fillAllVehicles : fillAllVehicles.filter(v => v.unit === fillOwnUnit);
+  return base
+    .filter(v => vehicleLabelOf(v).startsWith("軍H"))
+    .sort((x, y) => vehicleSortKey(vehicleLabelOf(x)) - vehicleSortKey(vehicleLabelOf(y)));
 }
 
 function vehicleOptionHtml(v) {
@@ -1908,10 +1916,10 @@ async function openFillSheet(r, existingDoc, roleKey) {
         <div class="field"><label>駕駛</label>
           <select id="fillDriverSelect"></select>
         </div>
+        <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);margin-bottom:10px">
+          <input type="checkbox" id="fillVehicleCrossUnitToggle" ${needsCrossUnitVehicle ? "checked" : ""}>跨單位選車（顯示所有單位車輛）
+        </label>
         <div class="field"><label>車號</label>
-          <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);margin-bottom:8px">
-            <input type="checkbox" id="fillVehicleCrossUnitToggle" ${needsCrossUnitVehicle ? "checked" : ""}>跨單位選車（顯示所有單位車輛）
-          </label>
           <select id="fillVehicleSelect"></select>
           <input type="text" id="fillVehicleManual" placeholder="手動輸入車號" style="margin-top:8px;display:none">
         </div>
