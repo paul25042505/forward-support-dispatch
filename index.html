@@ -199,7 +199,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-08-01.32";
+const BUILD_VERSION = "2026-08-01.33";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -442,6 +442,7 @@ function renderApplicantRegisterView() {
         </select>
       </div>
       <div class="field"><label>承辦人姓名</label><input id="arName" placeholder="例：陳○○"></div>
+      <div class="field"><label>承辦人手機號碼</label><input id="arPhone" type="tel" placeholder="例：0912345678"></div>
       <div class="field"><label>密碼（至少 6 碼）</label><input id="arPassword" type="password"></div>
       <button class="btn btn-primary" id="arRegisterBtn">註冊</button>
       <p style="text-align:center;margin-top:14px;font-size:12px"><a href="javascript:void(0)" id="arToLogin">已經註冊過？點此登入</a></p>
@@ -459,35 +460,38 @@ async function doApplicantRegister() {
   const unitName = document.getElementById("arUnitName").value.trim();
   const rank = document.getElementById("arRank").value.trim();
   const name = document.getElementById("arName").value.trim();
+  const phone = document.getElementById("arPhone").value.trim();
   const password = document.getElementById("arPassword").value;
-  if (!code || !unitName || !rank || !name || !password) { msg.innerHTML = `<div class="msg error">請完整填寫必填欄位</div>`; return; }
+  if (!code || !unitName || !rank || !name || !phone || !password) { msg.innerHTML = `<div class="msg error">請完整填寫必填欄位</div>`; return; }
   if (password.length < 6) { msg.innerHTML = `<div class="msg error">密碼至少需要 6 碼</div>`; return; }
   msg.innerHTML = `<div style="font-size:11px;color:var(--muted)">註冊中…</div>`;
   let cred = null;
   try {
-    const existing = await getDoc(doc(db, COL_UNITS, code));
-    if (existing.exists()) {
-      msg.innerHTML = `<div class="msg error">這個單位代碼已經註冊過了，請直接登入</div>`;
-      return;
-    }
     const email = unitCodeToEmail(code);
     suppressAuthGate = true;
     try {
       cred = await createUserWithEmailAndPassword(auth, email, password);
     } catch (createErr) {
       if (createErr.code !== "auth/email-already-in-use") throw createErr;
-      // 單位目錄裡沒有這筆，但帳號已經存在：多半是規則還沒貼好時，
-      // 上次註冊建到一半失敗留下的孤兒帳號。用剛輸入的密碼試著登入接手，
-      // 而不是直接當成別人已經註冊過而擋掉。
+      // 帳號已經存在：可能真的是別人（或自己）已經完整註冊過，也可能是
+      // 之前規則還沒貼好、或還沒搬到新集合時留下的孤兒帳號（forward_support_units
+      // 目錄裡有紀錄，但 forward_support_applicant_profiles 這份資料不存在）。
+      // 不直接擋掉，用剛輸入的密碼試著登入接手：密碼對的話會把缺少的 profile
+      // 補回去；密碼錯的話會在 catch 區塊顯示「單位或密碼錯誤」。
       cred = await signInWithEmailAndPassword(auth, email, password);
     }
     currentUser = cred.user;
     const newProfile = {
       email, fsr_role: "applicant", fsr_unitName: unitName,
-      unitCode: code, contactRank: rank, contactName: name, createdAt: serverTimestamp(),
+      unitCode: code, contactRank: rank, contactName: name, contactPhone: phone, createdAt: serverTimestamp(),
     };
     await setDoc(doc(db, COL_APPLICANT_PROFILES, cred.user.uid), newProfile);
-    await setDoc(doc(db, COL_UNITS, code), { code, name: unitName, createdAt: serverTimestamp() });
+    // 單位目錄只在第一次建立時寫入：規則只允許 create、不允許申請單位自己
+    // update 既有的目錄項目，孤兒帳號復原時這筆通常已經存在，跳過避免被規則擋下來。
+    const unitDirDoc = await getDoc(doc(db, COL_UNITS, code));
+    if (!unitDirDoc.exists()) {
+      await setDoc(doc(db, COL_UNITS, code), { code, name: unitName, createdAt: serverTimestamp() });
+    }
     profile = newProfile;
     gateErrorText = null;
     bootRoleApp();
