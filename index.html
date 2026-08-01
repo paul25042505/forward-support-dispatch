@@ -123,7 +123,9 @@
   .tag-picker{display:flex;gap:8px;flex-wrap:wrap}
   .tag-pick-chip{padding:7px 12px;border-radius:20px;font-size:12px;font-weight:600;border:1.5px solid var(--tag-color);color:var(--tag-color);cursor:pointer;background:color-mix(in srgb, var(--tag-color) 10%, transparent)}
   .tag-pick-chip.selected{background:var(--tag-color);color:#fff}
-  .preset-chip{padding:7px 12px;border-radius:20px;font-size:12px;font-weight:600;border:1px solid var(--line);color:var(--muted);cursor:pointer;background:var(--panel2)}
+  .preset-chip-row{display:flex;gap:8px;flex-wrap:nowrap;overflow-x:auto;margin-top:8px;padding-bottom:2px;-webkit-overflow-scrolling:touch}
+  .preset-chip-row::-webkit-scrollbar{display:none}
+  .preset-chip{flex-shrink:0;white-space:nowrap;padding:7px 12px;border-radius:20px;font-size:12px;font-weight:600;border:1px solid var(--line);color:var(--muted);cursor:pointer;background:var(--panel2)}
   .preset-chip:active{background:color-mix(in srgb, var(--accent) 14%, transparent);color:var(--accent);border-color:var(--accent)}
   .color-swatches{display:flex;gap:8px;flex-wrap:wrap}
   .color-swatch{width:28px;height:28px;border-radius:50%;cursor:pointer;border:2px solid transparent}
@@ -182,7 +184,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-08-01.1";
+const BUILD_VERSION = "2026-08-01.2";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -642,7 +644,7 @@ function currentPickedTag() {
 // 點擊只會把文字帶入輸入框，帶入後輸入框仍可自由編輯，不會被鎖定。
 function presetChipsHtml() {
   if (availablePresets.length === 0) return "";
-  return `<div class="tag-picker" style="margin-top:8px">
+  return `<div class="preset-chip-row">
     ${availablePresets.map(p => `<div class="preset-chip" data-presetname="${escapeHtml(p.name)}">${escapeHtml(p.name)}</div>`).join("")}
   </div>`;
 }
