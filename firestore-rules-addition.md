@@ -74,9 +74,27 @@
       allow read: if isFsrDispatcher();
       allow write: if isFsrAdmin();
     }
+
+    match /forward_support_task_presets/{presetId} {
+      allow read: if isFsrDispatcher();
+      allow write: if isFsrAdmin();
+    }
 ```
 
-貼完兩處後按「發布」。這樣就涵蓋：登入角色判斷、任務讀寫、承辦人自建任務、複製到其他日期、編輯、刪除、標籤系統、單位帳號與內部人員角色設定（透過 `users/{uid}` 那行 `fsr_role`/`fsr_unitName` 的放行）。
+貼完兩處後按「發布」。這樣就涵蓋：登入角色判斷、任務讀寫、承辦人自建任務、複製到其他日期、編輯、刪除、標籤系統、常用任務名稱快速選單、單位帳號與內部人員角色設定（透過 `users/{uid}` 那行 `fsr_role`/`fsr_unitName` 的放行）。
+
+### 2026-08-01 新增：常用任務名稱（forward_support_task_presets）
+
+如果你是**先前已經貼過**第 5 版規則的情況，只需要額外找到 `match /forward_support_tags/{tagId} { ... }` 那個區塊，在它後面（`}` 之後）加上：
+
+```
+    match /forward_support_task_presets/{presetId} {
+      allow read: if isFsrDispatcher();
+      allow write: if isFsrAdmin();
+    }
+```
+
+貼上後按「發布」即可，不用動到其他部分。
 
 ---
 
