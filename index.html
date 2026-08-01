@@ -195,7 +195,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-08-01.21";
+const BUILD_VERSION = "2026-08-01.22";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -1031,6 +1031,8 @@ const RANK_WEIGHT = {
 };
 function rankWeight(rank) { return RANK_WEIGHT[rank] ?? 999; }
 const ROLE_LABEL = { dispatcher:"業務承辦人", battalion_hq:"營部調度員", company1:"第一連調度員", company2:"第二連調度員", admin:"系統管理員" };
+const FSR_UNIT_TO_REAL_UNIT = { battalion_hq: "hq", company1: "co1", company2: "co2" };
+const SOLDIER_RANKS = ["上等兵", "一等兵", "二等兵"];
 
 function renderMoreView() {
   editingTagId = null;
@@ -1766,20 +1768,7 @@ function renderUnitContent() {
 }
 
 async function openFillForm(r) {
-  const commanderRank = prompt("車長級職："); if (commanderRank === null) return;
-  const commanderName = prompt("車長姓名："); if (commanderName === null) return;
-  const driverRank = prompt("駕駛級職："); if (driverRank === null) return;
-  const driverName = prompt("駕駛姓名："); if (driverName === null) return;
-  const vehicleNumber = prompt("車號（選填）：") || "";
-  try {
-    await addDoc(collection(db, COL_ASSIGNMENTS), {
-      requestId: r.id, unit: unitKeyToLabel(profile.fsr_role),
-      vehicleCommanderRank: commanderRank, vehicleCommanderName: commanderName,
-      driverRank, driverName, vehicleNumber,
-      filledBy: currentUser.uid, filledAt: serverTimestamp(),
-    });
-    await updateDoc(doc(db, COL_REQUESTS, r.id), { status: "filled" });
-  } catch (e) { alert("填寫失敗：" + e.message); }
+  await openFillSheet(r, null);
 }
 
 async function openEditFillForm(r) {
@@ -1789,19 +1778,102 @@ async function openEditFillForm(r) {
     if (snap.empty) { alert("找不到填寫紀錄"); return; }
     aDoc = snap.docs[0];
   } catch (e) { alert("讀取失敗：" + e.message); return; }
-  const a = aDoc.data();
-  const commanderRank = prompt("車長級職：", a.vehicleCommanderRank || ""); if (commanderRank === null) return;
-  const commanderName = prompt("車長姓名：", a.vehicleCommanderName || ""); if (commanderName === null) return;
-  const driverRank = prompt("駕駛級職：", a.driverRank || ""); if (driverRank === null) return;
-  const driverName = prompt("駕駛姓名：", a.driverName || ""); if (driverName === null) return;
-  const vehicleNumber = prompt("車號（選填）：", a.vehicleNumber || "") || "";
+  await openFillSheet(r, aDoc);
+}
+
+let fillTargetTask = null;
+let fillTargetDocId = null;
+
+async function openFillSheet(r, existingDoc) {
+  fillTargetTask = r;
+  fillTargetDocId = existingDoc ? existingDoc.id : null;
+  const a = existingDoc ? existingDoc.data() : {};
+
+  const realUnit = FSR_UNIT_TO_REAL_UNIT[profile.fsr_role];
+  let personnel = [];
   try {
-    await updateDoc(doc(db, COL_ASSIGNMENTS, aDoc.id), {
-      vehicleCommanderRank: commanderRank, vehicleCommanderName: commanderName,
-      driverRank, driverName, vehicleNumber,
-    });
-    alert("已更新");
-  } catch (e) { alert("更新失敗：" + e.message); }
+    const snap = await getDocs(query(collection(db, "users"), where("unit", "==", realUnit)));
+    personnel = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(u => !["unclaimed", "pending", "disabled"].includes(u.role))
+      .sort((x, y) => rankWeight(x.rank) - rankWeight(y.rank) || (x.displayName || "").localeCompare(y.displayName || "", "zh-Hant"));
+  } catch (e) { /* 查無人員資料時仍顯示空白下拉選單 */ }
+
+  const commanderPool = personnel.filter(u => !SOLDIER_RANKS.includes(u.rank));
+  const optionHtml = (u) => `<option value="${u.id}" data-rank="${escapeHtml(u.rank || "")}" data-name="${escapeHtml(u.displayName || "")}">${escapeHtml(u.rank || "")} ${escapeHtml(u.displayName || "")}</option>`;
+  const findSelected = (pool, rank, name) => pool.find(u => u.rank === rank && u.displayName === name);
+  const selectedCommander = findSelected(commanderPool, a.vehicleCommanderRank, a.vehicleCommanderName);
+  const selectedDriver = findSelected(personnel, a.driverRank, a.driverName);
+
+  const overlay = document.createElement("div");
+  overlay.className = "sheet-overlay";
+  overlay.id = "fillOverlay";
+  overlay.innerHTML = `
+    <div class="sheet">
+      <div class="sheet-title">${escapeHtml(r.taskName || r.location || "")}</div>
+      <div style="padding:16px 20px">
+        <div class="field"><label>車長（不含士兵）</label>
+          <select id="fillCommanderSelect">
+            <option value="">請選擇</option>
+            ${commanderPool.map(optionHtml).join("")}
+          </select>
+        </div>
+        <div class="field"><label>駕駛</label>
+          <select id="fillDriverSelect">
+            <option value="">請選擇</option>
+            ${personnel.map(optionHtml).join("")}
+          </select>
+        </div>
+        <div class="field"><label>車號（選填）</label>
+          <input type="text" id="fillVehicleNumber" value="${escapeHtml(a.vehicleNumber || "")}">
+        </div>
+        <button class="btn btn-primary" id="fillConfirmBtn">確認送出</button>
+        <button class="back-link" id="fillCancelBtn" style="display:block;text-align:center;margin:10px auto 0">取消</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  if (selectedCommander) document.getElementById("fillCommanderSelect").value = selectedCommander.id;
+  if (selectedDriver) document.getElementById("fillDriverSelect").value = selectedDriver.id;
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) closeFillSheet(); });
+  document.getElementById("fillCancelBtn").onclick = closeFillSheet;
+  document.getElementById("fillConfirmBtn").onclick = doFillConfirm;
+}
+
+function closeFillSheet() {
+  const overlay = document.getElementById("fillOverlay");
+  if (overlay) overlay.remove();
+  fillTargetTask = null;
+  fillTargetDocId = null;
+}
+
+async function doFillConfirm() {
+  const r = fillTargetTask;
+  if (!r) return;
+  const commanderSel = document.getElementById("fillCommanderSelect");
+  const driverSel = document.getElementById("fillDriverSelect");
+  if (!commanderSel.value || !driverSel.value) { alert("請選擇車長與駕駛"); return; }
+  const commanderOpt = commanderSel.selectedOptions[0];
+  const driverOpt = driverSel.selectedOptions[0];
+  const vehicleNumber = document.getElementById("fillVehicleNumber").value.trim();
+  const commanderRank = commanderOpt.dataset.rank, commanderName = commanderOpt.dataset.name;
+  const driverRank = driverOpt.dataset.rank, driverName = driverOpt.dataset.name;
+  try {
+    if (fillTargetDocId) {
+      await updateDoc(doc(db, COL_ASSIGNMENTS, fillTargetDocId), {
+        vehicleCommanderRank: commanderRank, vehicleCommanderName: commanderName,
+        driverRank, driverName, vehicleNumber,
+      });
+    } else {
+      await addDoc(collection(db, COL_ASSIGNMENTS), {
+        requestId: r.id, unit: unitKeyToLabel(profile.fsr_role),
+        vehicleCommanderRank: commanderRank, vehicleCommanderName: commanderName,
+        driverRank, driverName, vehicleNumber,
+        filledBy: currentUser.uid, filledAt: serverTimestamp(),
+      });
+      await updateDoc(doc(db, COL_REQUESTS, r.id), { status: "filled" });
+    }
+    closeFillSheet();
+  } catch (e) { alert("送出失敗：" + e.message); }
 }
 
 function watchRequestsForUnit() {
