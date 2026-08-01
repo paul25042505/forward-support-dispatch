@@ -64,6 +64,7 @@
   .field{margin-bottom:14px}
   .field label{display:block;font-family:'JetBrains Mono';font-size:10.5px;color:var(--muted);letter-spacing:.06em;margin-bottom:6px}
   .field input, .field select, .field textarea{width:100%;max-width:100%;min-width:0;min-height:44px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:11px 12px;font-size:13.5px;color:var(--text)}
+  .field input[type="date"]{-webkit-appearance:none;appearance:none;display:block}
   .field textarea{resize:vertical;min-height:64px}
   .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 
@@ -187,7 +188,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-08-01.9";
+const BUILD_VERSION = "2026-08-01.10";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
