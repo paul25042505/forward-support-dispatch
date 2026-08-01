@@ -192,7 +192,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-08-01.16";
+const BUILD_VERSION = "2026-08-01.17";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -214,6 +214,8 @@ const COL_ASSIGNMENTS = "forward_support_assignments";
 const COL_UNITS = "forward_support_units";
 const COL_TAGS = "forward_support_tags";
 const COL_PRESETS = "forward_support_task_presets";
+const COL_APPLICANT_PROFILES = "forward_support_applicant_profiles";
+const APPLICANT_EMAIL_DOMAIN = "fsr.local";
 
 const TAG_COLOR_PALETTE = ["#d9631f","#2f6fe0","#1f9d5c","#c98a0e","#d64545","#8b5cf6","#0891b2","#db2777"];
 
@@ -282,9 +284,14 @@ onAuthStateChanged(auth, async (user) => {
   currentUser = user;
   if (!user) { profile = null; renderLogin(); return; }
 
+  // 申請單位帳號用獨立的合成 email（單位代碼@fsr.local），資料存在專屬的
+  // forward_support_applicant_profiles 集合，跟衛生營系統共用的 users 集合完全分開。
+  const isApplicantAccount = (user.email || "").endsWith("@" + APPLICANT_EMAIL_DOMAIN);
+  const profileCollection = isApplicantAccount ? COL_APPLICANT_PROFILES : "users";
+
   let snap;
   try {
-    snap = await getDoc(doc(db, "users", user.uid));
+    snap = await getDoc(doc(db, profileCollection, user.uid));
   } catch (e) {
     gateErrorText = `讀取帳號資料失敗：${e.code || e.message}（可能是 Firestore 規則還沒設定好）`;
     await signOut(auth);
@@ -292,13 +299,13 @@ onAuthStateChanged(auth, async (user) => {
   }
 
   if (!snap.exists()) {
-    gateErrorText = "找不到此帳號的角色設定，請聯絡管理者加上 fsr_role 欄位";
+    gateErrorText = isApplicantAccount ? "找不到這個申請單位帳號的資料，請重新註冊一次" : "找不到此帳號的角色設定，請聯絡管理者加上 fsr_role 欄位";
     await signOut(auth);
     return;
   }
   profile = snap.data();
   if (!profile.fsr_role) {
-    gateErrorText = "這個 Google 帳號還沒被設定 fsr_role，請到 Firestore 的 users 文件加上角色欄位（dispatcher／battalion_hq／company1／company2／admin）";
+    gateErrorText = "這個帳號還沒被設定 fsr_role";
     await signOut(auth);
     return;
   }
@@ -340,7 +347,7 @@ function renderLogin() {
 
 // ---- 申請單位：單位代碼 → 內部合成 email（Firebase Auth 需要 email 格式帳號）----
 function unitCodeToEmail(code) {
-  return code.trim().toLowerCase().replace(/[^a-z0-9]/g, "") + "@fsr.local";
+  return code.trim().toLowerCase().replace(/[^a-z0-9]/g, "") + "@" + APPLICANT_EMAIL_DOMAIN;
 }
 
 function applicantAuthErrorText(e) {
@@ -461,7 +468,7 @@ async function doApplicantRegister() {
       email, fsr_role: "applicant", fsr_unitName: unitName,
       unitCode: code, contactRank: rank, contactName: name, createdAt: serverTimestamp(),
     };
-    await setDoc(doc(db, "users", cred.user.uid), newProfile);
+    await setDoc(doc(db, COL_APPLICANT_PROFILES, cred.user.uid), newProfile);
     await setDoc(doc(db, COL_UNITS, code), { code, name: unitName, createdAt: serverTimestamp() });
     profile = newProfile;
     gateErrorText = null;
@@ -1055,19 +1062,18 @@ async function renderAccountsView() {
     const psnap = await getDocs(collection(db, "users"));
     allPersonnel = psnap.docs
       .map(d => ({ id: d.id, ...d.data() }))
-      .filter(u => u.role !== "unclaimed" && u.fsr_role !== "applicant")
+      .filter(u => u.role !== "unclaimed")
       .sort((a, b) => rankWeight(a.rank) - rankWeight(b.rank) || (a.displayName || "").localeCompare(b.displayName || "", "zh-Hant"));
   } catch (e) {
     allPersonnel = [];
   }
 
   if (unsubAccounts) unsubAccounts();
-  const q = query(collection(db, "users"), where("fsr_role", "==", "applicant"));
-  unsubAccounts = onSnapshot(q, (snap) => {
+  unsubAccounts = onSnapshot(collection(db, COL_APPLICANT_PROFILES), (snap) => {
     applicantAccounts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     if (activeSection === "more" && moreSection === "accounts") drawAccountsList();
   }, (e) => {
-    c.innerHTML = `<div class="msg error">讀取失敗：${e.message}（可能是 Firestore 規則還沒開放管理者讀取 users）</div>`;
+    c.innerHTML = `<div class="msg error">讀取失敗：${e.message}（可能是 Firestore 規則還沒設定好）</div>`;
   });
 
   if (unsubInternalAccounts) unsubInternalAccounts();
@@ -1406,7 +1412,7 @@ async function saveUnitName(a) {
   const val = document.getElementById(`unitname-${a.id}`).value.trim();
   if (!val) { alert("單位名稱不能空白"); return; }
   try {
-    await updateDoc(doc(db, "users", a.id), { fsr_unitName: val });
+    await updateDoc(doc(db, COL_APPLICANT_PROFILES, a.id), { fsr_unitName: val });
     alert("已更新單位名稱");
   } catch (e) { alert("更新失敗：" + e.message); }
 }
