@@ -146,6 +146,28 @@
 
 貼上後按「發布」。
 
+### 2026-08-01 新增：管理員可以在「角色預覽」代替任何單位填寫車長／駕駛
+
+「更多」頁的「角色預覽」現在可以直接以管理員身分點「填寫車長／駕駛」，代替營部/一連/二連把資料真的送出去（不只是看畫面），方便你不用另外用調度員帳號登入測試。這個動作一樣是寫入 `forward_support_assignments`，原本這個集合只允許「自己單位」的調度員新增/修改，管理員要另外放行。
+
+找到 `match /forward_support_assignments/{aId} { ... }` 這個區塊，把 `allow create` 跟 `allow update` 這兩行：
+```
+      allow create: if isFsrUnitRole()
+        && request.resource.data.unit == fsrUnitLabel()
+        && request.resource.data.filledBy == request.auth.uid;
+      allow update: if isFsrUnitRole() && resource.data.unit == fsrUnitLabel();
+```
+改成：
+```
+      allow create: if (isFsrUnitRole() && request.resource.data.unit == fsrUnitLabel()
+                        && request.resource.data.filledBy == request.auth.uid)
+                    || (isFsrAdmin() && request.resource.data.filledBy == request.auth.uid);
+      allow update: if (isFsrUnitRole() && resource.data.unit == fsrUnitLabel()) || isFsrAdmin();
+```
+（`allow read`／`allow delete` 不用動。）
+
+貼上後按「發布」。
+
 ---
 
 ## 第 1～4 版（歷史記錄，已被第 5 版取代，僅供參考）
