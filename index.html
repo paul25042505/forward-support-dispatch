@@ -192,7 +192,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-08-01.12";
+const BUILD_VERSION = "2026-08-01.13";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -993,6 +993,7 @@ let applicantAccounts = [];
 let internalAccounts = [];
 let unsubAccounts = null;
 let unsubInternalAccounts = null;
+let allPersonnel = []; // 衛生營系統全部人員快取，供指派前支角色時用級職姓名挑選
 const ROLE_LABEL = { dispatcher:"承辦人", battalion_hq:"營部", company1:"一連", company2:"二連", admin:"管理者" };
 
 function renderMoreView() {
@@ -1037,9 +1038,19 @@ function backToMoreMenu() {
   renderMoreMenu();
 }
 
-function renderAccountsView() {
+async function renderAccountsView() {
   const c = document.getElementById("content");
   c.innerHTML = `<div class="empty">載入中…</div>`;
+
+  try {
+    const psnap = await getDocs(collection(db, "users"));
+    allPersonnel = psnap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(u => u.role !== "unclaimed")
+      .sort((a, b) => (a.displayName || "").localeCompare(b.displayName || "", "zh-Hant"));
+  } catch (e) {
+    allPersonnel = [];
+  }
 
   if (unsubAccounts) unsubAccounts();
   const q = query(collection(db, "users"), where("fsr_role", "==", "applicant"));
@@ -1107,14 +1118,19 @@ function drawAccountsList() {
     <div class="section-lbl">設定內部人員角色</div>
     <div class="card">
       <div id="setRoleMsg"></div>
-      <div class="field"><label>對方的 Email（要跟他登入 Google 用的信箱一致）</label><input id="setRoleEmail" placeholder="you@gmail.com"></div>
+      <div class="field"><label>選擇人員</label>
+        <select id="setRoleUid">
+          <option value="">請選擇人員</option>
+          ${allPersonnel.map(u => `<option value="${u.id}">${escapeHtml(u.rank ? u.rank + " " : "")}${escapeHtml(u.displayName || u.email || u.id)}${u.email ? "｜" + escapeHtml(u.email) : ""}</option>`).join("")}
+        </select>
+      </div>
       <div class="field"><label>角色</label>
         <select id="setRoleSelect">
           ${Object.entries(ROLE_LABEL).map(([v,l]) => `<option value="${v}">${l}</option>`).join("")}
         </select>
       </div>
-      <button class="btn btn-primary" id="setRoleBtn">查詢並設定角色</button>
-      <p style="font-size:11px;color:var(--muted);margin-top:10px">對方必須「已經登入過衛生營系統至少一次」，這個查詢才找得到他的帳號。</p>
+      <button class="btn btn-primary" id="setRoleBtn">設定角色</button>
+      <p style="font-size:11px;color:var(--muted);margin-top:10px">清單只會列出「已經登入過衛生營系統至少一次」的人員；如果找不到對方，請對方先登入一次衛生營系統再重新整理這頁。</p>
     </div>
 
     <div class="section-lbl" style="margin-top:22px">已設定的內部人員</div>
@@ -1348,23 +1364,16 @@ async function deletePresetNow(id) {
 
 async function doSetInternalRole() {
   const msg = document.getElementById("setRoleMsg");
-  const email = document.getElementById("setRoleEmail").value.trim();
+  const uid = document.getElementById("setRoleUid").value;
   const role = document.getElementById("setRoleSelect").value;
-  if (!email) { msg.innerHTML = `<div class="msg error">請輸入 Email</div>`; return; }
-  msg.innerHTML = `<div style="font-size:11px;color:var(--muted)">查詢中…</div>`;
+  if (!uid) { msg.innerHTML = `<div class="msg error">請選擇人員</div>`; return; }
+  msg.innerHTML = `<div style="font-size:11px;color:var(--muted)">設定中…</div>`;
   try {
-    const q = query(collection(db, "users"), where("email", "==", email));
-    const snap = await getDocs(q);
-    if (snap.empty) {
-      msg.innerHTML = `<div class="msg error">找不到這個 email 的帳號，請確認對方已經登入過衛生營系統至少一次</div>`;
-      return;
-    }
-    const targetDoc = snap.docs[0];
-    const targetData = targetDoc.data();
-    await updateDoc(doc(db, "users", targetDoc.id), { fsr_role: role });
-    const displayName = (targetData.rank ? targetData.rank + " " : "") + (targetData.displayName || email);
+    await updateDoc(doc(db, "users", uid), { fsr_role: role });
+    const u = allPersonnel.find(x => x.id === uid);
+    const displayName = (u && u.rank ? u.rank + " " : "") + (u ? (u.displayName || u.email || uid) : uid);
     msg.innerHTML = `<div class="msg ok">已將 ${escapeHtml(displayName)} 設定為「${ROLE_LABEL[role]}」</div>`;
-    document.getElementById("setRoleEmail").value = "";
+    document.getElementById("setRoleUid").value = "";
   } catch (e) {
     msg.innerHTML = `<div class="msg error">設定失敗：${e.message}</div>`;
   }
