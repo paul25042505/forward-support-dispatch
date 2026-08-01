@@ -114,18 +114,20 @@
 找到 `forward_support_*` 那個 functions 區塊（`fsrRole()`、`isFsrAdmin()` 那幾行），加上這個新 function：
 
 ```
-    function isFsrSelfSignup() {
-      return isSignedIn() && request.auth.uid == uid
+    function isFsrSelfSignup(targetUid) {
+      return isSignedIn() && request.auth.uid == targetUid
         && request.resource.data.fsr_role == 'applicant'
         && !('role' in request.resource.data)
         && !('unit' in request.resource.data);
     }
 ```
 
-然後找到 `match /users/{uid} { ... }` 區塊裡的 `allow create` 那一段（結尾應該類似 `... && sameUnit(request.resource.data.unit))));`），在最後一個 `||` 條件後面、右括號 `;` 之前，加上這一行（記得補上 `||`）：
+（⚠️ 2026-08-01 更正：一開始這個 function 寫成 `isFsrSelfSignup()`、內部直接比對 `request.auth.uid == uid`，看起來會用到 `match /users/{uid}` 那個路徑變數 `uid`——但 Firestore 規則裡的 function 有自己獨立的作用域，看不到外面 `match` 區塊抓到的路徑變數，除非明確當參數傳進去。原本那個寫法會讓 `uid` 一直是「沒定義」，導致整個判斷式永遠是 false、規則形同虛設，實測會一直卡在 `Missing or insufficient permissions`。已經改成用參數 `targetUid` 傳入，呼叫的地方也要記得帶參數，見下面。如果你已經貼過舊版，要連這個 function 一起換掉。）
+
+然後找到 `match /users/{uid} { ... }` 區塊裡的 `allow create` 那一段（結尾應該類似 `... && sameUnit(request.resource.data.unit))));`），在最後一個 `||` 條件後面、右括號 `;` 之前，加上這一行（記得補上 `||`，而且要帶 `uid` 這個參數）：
 
 ```
-                    || isFsrSelfSignup();
+                    || isFsrSelfSignup(uid);
 ```
 
 貼完兩處後按「發布」。`forward_support_units`（單位代碼目錄）跟 `forward_support_requests`（申請單位送出任務）用的規則，第 5 版都已經涵蓋了，不用再改。
