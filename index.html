@@ -165,10 +165,11 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getAuth, onAuthStateChanged, signInWithPopup, signInWithRedirect, getRedirectResult,
-  GoogleAuthProvider, signOut, sendPasswordResetEmail
+  GoogleAuthProvider, signOut, sendPasswordResetEmail,
+  createUserWithEmailAndPassword, signInWithEmailAndPassword
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
-  getFirestore, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, collection,
+  getFirestore, doc, getDoc, getDocs, addDoc, setDoc, updateDoc, deleteDoc, collection,
   query, where, orderBy, onSnapshot, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
@@ -184,7 +185,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-08-01.3";
+const BUILD_VERSION = "2026-08-01.4";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -230,6 +231,9 @@ let allRequests = [];     // 目前使用者可見的任務快取
 let unsubRequests = null;
 let activeTab = null;
 let gateErrorText = null; // 登入被擋下時要顯示的錯誤訊息（避免 signOut 觸發的重繪把訊息蓋掉）
+let loginMode = "internal"; // internal | applicantLogin | applicantRegister（登入頁目前顯示哪種登入方式）
+let suppressAuthGate = false; // 申請單位註冊流程中，暫停 onAuthStateChanged 的自動導轉，改由註冊流程自己接手
+let applicantSection = "submit"; // submit | mine（申請人站目前分頁）
 let availableTags = [];   // 前支種類標籤快取
 let editingTagId = null;  // 更多頁目前正在編輯（展開顏色選取）的標籤
 let editingInternalId = null; // 更多頁目前正在編輯角色的內部人員 uid
@@ -258,6 +262,7 @@ window.addEventListener("unhandledrejection", (ev) => {
 // Auth 狀態監聽
 // ------------------------------------------------------------
 onAuthStateChanged(auth, async (user) => {
+  if (suppressAuthGate) return; // 申請單位註冊流程進行中，交給那段流程自己收尾
   if (unsubRequests) { unsubRequests(); unsubRequests = null; }
   currentUser = user;
   if (!user) { profile = null; renderLogin(); return; }
@@ -283,8 +288,8 @@ onAuthStateChanged(auth, async (user) => {
     return;
   }
   if (profile.fsr_role === "applicant") {
-    gateErrorText = "此帳號為申請單位帳號，請至申請人站登入";
-    await signOut(auth);
+    gateErrorText = null;
+    bootRoleApp();
     return;
   }
   if (!VALID_INTERNAL_ROLES.includes(profile.fsr_role)) {
@@ -297,9 +302,11 @@ onAuthStateChanged(auth, async (user) => {
 });
 
 // ==============================================================
-// 登入（本站僅供內部人員，無註冊功能）
+// 登入（內部人員：Google 登入／申請單位：單位代碼＋密碼登入或註冊）
 // ==============================================================
 function renderLogin() {
+  if (loginMode === "applicantLogin") { renderApplicantLoginView(); return; }
+  if (loginMode === "applicantRegister") { renderApplicantRegisterView(); return; }
   $app.innerHTML = `
     <div class="auth-wrap">
       <div class="brand-mark"><span>前</span></div>
@@ -308,10 +315,138 @@ function renderLogin() {
       <div id="authMsg">${gateErrorText ? `<div class="msg error">${gateErrorText}</div>` : ""}</div>
       <button class="btn btn-primary" id="googleLoginBtn">使用 Google 帳號登入</button>
       <p style="font-size:11px;color:var(--muted);margin-top:14px;text-align:center">請使用你在衛生營系統原本綁定的 Google 帳號登入</p>
-      <p style="font-size:10px;color:var(--muted);margin-top:30px;text-align:center;font-family:'JetBrains Mono'">build ${BUILD_VERSION}</p>
+      <p style="text-align:center;margin-top:22px;font-size:12px"><a href="javascript:void(0)" id="toApplicantLogin">外部申請單位登入 →</a></p>
+      <p style="font-size:10px;color:var(--muted);margin-top:20px;text-align:center;font-family:'JetBrains Mono'">build ${BUILD_VERSION}</p>
     </div>`;
   gateErrorText = null;
   document.getElementById("googleLoginBtn").onclick = doLogin;
+  document.getElementById("toApplicantLogin").onclick = () => { loginMode = "applicantLogin"; renderLogin(); };
+}
+
+// ---- 申請單位：單位代碼 → 內部合成 email（Firebase Auth 需要 email 格式帳號）----
+function unitCodeToEmail(code) {
+  return code.trim().toLowerCase().replace(/[^a-z0-9]/g, "") + "@fsr.local";
+}
+
+function applicantAuthErrorText(e) {
+  const code = (e && e.code) || "";
+  if (code.includes("email-already-in-use")) return "這個單位代碼已經註冊過了，請直接登入";
+  if (code.includes("weak-password")) return "密碼太簡單，請至少 6 碼";
+  if (code.includes("wrong-password") || code.includes("invalid-credential") || code.includes("invalid-login-credentials")) return "單位或密碼錯誤";
+  if (code.includes("user-not-found")) return "查無此單位帳號，請確認是否已註冊";
+  if (code.includes("too-many-requests")) return "嘗試次數過多，請稍後再試";
+  if (code.includes("operation-not-allowed")) return "系統尚未開通申請單位登入方式，請聯絡管理者";
+  return (e && e.message) || "發生未知錯誤";
+}
+
+async function loadUnitDirectoryIntoSelect(selectId) {
+  const sel = document.getElementById(selectId);
+  if (!sel) return;
+  try {
+    const snap = await getDocs(query(collection(db, COL_UNITS), orderBy("name")));
+    const units = snap.docs.map(d => d.data());
+    sel.innerHTML = units.length === 0
+      ? `<option value="">目前還沒有已註冊的單位，請先註冊</option>`
+      : `<option value="">請選擇單位</option>` + units.map(u => `<option value="${escapeHtml(u.code)}">${escapeHtml(u.code)} - ${escapeHtml(u.name)}</option>`).join("");
+  } catch (e) {
+    sel.innerHTML = `<option value="">單位清單載入失敗</option>`;
+  }
+}
+
+function renderApplicantLoginView() {
+  $app.innerHTML = `
+    <div class="auth-wrap">
+      <div class="brand-mark"><span>前</span></div>
+      <h1>前支任務派遣中心</h1>
+      <p class="sub">外部申請單位登入</p>
+      <div id="authMsg">${gateErrorText ? `<div class="msg error">${gateErrorText}</div>` : ""}</div>
+      <div class="field"><label>單位</label><select id="alUnit"><option value="">載入中…</option></select></div>
+      <div class="field"><label>密碼</label><input id="alPassword" type="password"></div>
+      <button class="btn btn-primary" id="alLoginBtn">登入</button>
+      <p style="text-align:center;margin-top:14px;font-size:12px"><a href="javascript:void(0)" id="alToRegister">還沒註冊？點此註冊單位帳號</a></p>
+      <p style="text-align:center;margin-top:8px;font-size:12px"><a href="javascript:void(0)" id="alBackToInternal">← 返回內部人員登入</a></p>
+    </div>`;
+  gateErrorText = null;
+  document.getElementById("alBackToInternal").onclick = () => { loginMode = "internal"; renderLogin(); };
+  document.getElementById("alToRegister").onclick = () => { loginMode = "applicantRegister"; renderLogin(); };
+  document.getElementById("alLoginBtn").onclick = doApplicantLogin;
+  loadUnitDirectoryIntoSelect("alUnit");
+}
+
+async function doApplicantLogin() {
+  const msg = document.getElementById("authMsg");
+  const code = document.getElementById("alUnit").value;
+  const password = document.getElementById("alPassword").value;
+  if (!code || !password) { msg.innerHTML = `<div class="msg error">請選擇單位並輸入密碼</div>`; return; }
+  msg.innerHTML = `<div style="font-size:11px;color:var(--muted)">登入中…</div>`;
+  try {
+    await signInWithEmailAndPassword(auth, unitCodeToEmail(code), password);
+  } catch (e) {
+    msg.innerHTML = `<div class="msg error">登入失敗：${applicantAuthErrorText(e)}</div>`;
+  }
+}
+
+function renderApplicantRegisterView() {
+  $app.innerHTML = `
+    <div class="auth-wrap">
+      <div class="brand-mark"><span>前</span></div>
+      <h1>前支任務派遣中心</h1>
+      <p class="sub">外部申請單位・註冊</p>
+      <div id="authMsg">${gateErrorText ? `<div class="msg error">${gateErrorText}</div>` : ""}</div>
+      <div class="field"><label>單位代碼</label><input id="arCode" placeholder="例：A123"></div>
+      <div class="field"><label>單位全銜</label><input id="arUnitName" placeholder="例：台中市消防局大甲分隊"></div>
+      <div class="field"><label>承辦人級職（選填）</label><input id="arRank" placeholder="例：分隊長"></div>
+      <div class="field"><label>承辦人姓名（選填）</label><input id="arName" placeholder="例：陳○○"></div>
+      <div class="field"><label>密碼（至少 6 碼）</label><input id="arPassword" type="password"></div>
+      <button class="btn btn-primary" id="arRegisterBtn">註冊</button>
+      <p style="text-align:center;margin-top:14px;font-size:12px"><a href="javascript:void(0)" id="arToLogin">已經註冊過？點此登入</a></p>
+      <p style="text-align:center;margin-top:8px;font-size:12px"><a href="javascript:void(0)" id="arBackToInternal">← 返回內部人員登入</a></p>
+    </div>`;
+  gateErrorText = null;
+  document.getElementById("arBackToInternal").onclick = () => { loginMode = "internal"; renderLogin(); };
+  document.getElementById("arToLogin").onclick = () => { loginMode = "applicantLogin"; renderLogin(); };
+  document.getElementById("arRegisterBtn").onclick = doApplicantRegister;
+}
+
+async function doApplicantRegister() {
+  const msg = document.getElementById("authMsg");
+  const code = document.getElementById("arCode").value.trim();
+  const unitName = document.getElementById("arUnitName").value.trim();
+  const rank = document.getElementById("arRank").value.trim();
+  const name = document.getElementById("arName").value.trim();
+  const password = document.getElementById("arPassword").value;
+  if (!code || !unitName || !password) { msg.innerHTML = `<div class="msg error">請完整填寫必填欄位</div>`; return; }
+  if (password.length < 6) { msg.innerHTML = `<div class="msg error">密碼至少需要 6 碼</div>`; return; }
+  msg.innerHTML = `<div style="font-size:11px;color:var(--muted)">註冊中…</div>`;
+  let cred = null;
+  try {
+    const existing = await getDoc(doc(db, COL_UNITS, code));
+    if (existing.exists()) {
+      msg.innerHTML = `<div class="msg error">這個單位代碼已經註冊過了，請直接登入</div>`;
+      return;
+    }
+    suppressAuthGate = true;
+    cred = await createUserWithEmailAndPassword(auth, unitCodeToEmail(code), password);
+    currentUser = cred.user;
+    const newProfile = {
+      email: unitCodeToEmail(code), fsr_role: "applicant", fsr_unitName: unitName,
+      unitCode: code, contactRank: rank, contactName: name, createdAt: serverTimestamp(),
+    };
+    await setDoc(doc(db, "users", cred.user.uid), newProfile);
+    await setDoc(doc(db, COL_UNITS, code), { code, name: unitName, createdAt: serverTimestamp() });
+    profile = newProfile;
+    gateErrorText = null;
+    bootRoleApp();
+  } catch (e) {
+    msg.innerHTML = `<div class="msg error">註冊失敗：${applicantAuthErrorText(e)}</div>`;
+    // 帳號已建立但後續寫入失敗（例如規則還沒貼好），先登出避免卡在「已登入但沒有資料」的狀態
+    if (cred) {
+      try { await signOut(auth); } catch (_) {}
+      currentUser = null;
+    }
+  } finally {
+    suppressAuthGate = false;
+  }
 }
 
 async function doLogin() {
@@ -348,6 +483,7 @@ function authErrorText(e) {
 function bootRoleApp() {
   const role = profile.fsr_role;
   if (role === "dispatcher" || role === "admin") { activeTab = "pending"; renderDispatcherShell(); watchRequestsForDispatcher(); watchTags(); watchPresets(); }
+  else if (role === "applicant") { renderApplicantShell(); watchRequestsForApplicant(); }
   else { activeTab = "assigned"; renderUnitShell(); watchRequestsForUnit(); }
 }
 
@@ -1374,6 +1510,97 @@ function watchRequestsForUnit() {
   unsubRequests = onSnapshot(q, (snap) => {
     allRequests = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     renderUnitContent();
+  });
+}
+
+// ==============================================================
+// 申請單位（外部申請站：送出申請／查看自己的申請紀錄）
+// ==============================================================
+function renderApplicantShell() {
+  applicantSection = "submit";
+  $app.innerHTML = `
+    ${topbarHtml("前支任務派遣中心", "申請單位 ・ " + escapeHtml(profile.fsr_unitName || ""))}
+    <div class="content" id="content"></div>
+    <div class="tabbar">
+      <button class="item" data-asection="submit">${ICON_TASKS}送出申請</button>
+      <button class="item" data-asection="mine">${ICON_RECORDS}我的申請</button>
+    </div>`;
+  bindLogout();
+  document.querySelectorAll(".tabbar [data-asection]").forEach(el => el.onclick = () => { applicantSection = el.dataset.asection; renderApplicantSection(); });
+  renderApplicantSection();
+}
+
+function renderApplicantSection() {
+  document.querySelectorAll(".tabbar .item[data-asection]").forEach(el => el.classList.toggle("active", el.dataset.asection === applicantSection));
+  if (applicantSection === "submit") renderApplicantSubmitView();
+  else renderApplicantMineView();
+}
+
+function renderApplicantSubmitView() {
+  const c = document.getElementById("content");
+  c.innerHTML = `
+    <div id="applicantCreateMsg"></div>
+    <div class="field"><label>任務名稱</label><input id="apTaskName" placeholder="例：成功嶺鑑測站"></div>
+    <div class="field"><label>承辦人級職（選填）</label><input id="apRank" value="${escapeHtml(profile.contactRank || "")}"></div>
+    <div class="field"><label>承辦人姓名（選填）</label><input id="apName" value="${escapeHtml(profile.contactName || "")}"></div>
+    <div class="field"><label>任務地點</label><input id="apLoc" placeholder="請輸入地點"></div>
+    <div class="field"><label>開始時間</label><input id="apStart" type="datetime-local" step="1800"></div>
+    <div class="field"><label>結束時間</label><input id="apEnd" type="datetime-local" step="1800"></div>
+    <div class="field"><label>備註（選填）</label><textarea id="apRemarks"></textarea></div>
+    <button class="btn btn-primary" id="apSubmitBtn">送出申請</button>`;
+  document.getElementById("apSubmitBtn").onclick = doApplicantSubmit;
+}
+
+async function doApplicantSubmit() {
+  const msg = document.getElementById("applicantCreateMsg");
+  const taskName = document.getElementById("apTaskName").value.trim();
+  const rank = document.getElementById("apRank").value.trim();
+  const name = document.getElementById("apName").value.trim();
+  const loc = document.getElementById("apLoc").value.trim();
+  const start = document.getElementById("apStart").value;
+  const end = document.getElementById("apEnd").value;
+  const remarks = document.getElementById("apRemarks").value.trim();
+  if (!taskName || !loc || !start || !end) {
+    msg.innerHTML = `<div class="msg error">請完整填寫必填欄位</div>`; return;
+  }
+  try {
+    await addDoc(collection(db, COL_REQUESTS), {
+      taskName,
+      applicantUnit: profile.fsr_unitName || "",
+      applicantRank: rank, applicantName: name,
+      location: loc,
+      taskStartTime: new Date(start),
+      taskEndTime: new Date(end),
+      remarks,
+      tagId: null, tagName: null, tagColor: null,
+      status: "pending",
+      assignedUnit: null,
+      createdAt: serverTimestamp(),
+      createdBy: currentUser.uid,
+      createdByDispatcher: false,
+      reviewedBy: null,
+      reviewedAt: null,
+    });
+    msg.innerHTML = `<div class="msg ok">申請已送出</div>`;
+    ["apTaskName","apLoc","apStart","apEnd","apRemarks"].forEach(id => document.getElementById(id).value = "");
+  } catch (e) {
+    msg.innerHTML = `<div class="msg error">送出失敗：${e.message}</div>`;
+  }
+}
+
+function renderApplicantMineView() {
+  const c = document.getElementById("content");
+  c.innerHTML = allRequests.length === 0
+    ? `<div class="empty">目前還沒有送出過申請</div>`
+    : allRequests.map(r => taskCardHtml(r, false, false)).join("");
+}
+
+function watchRequestsForApplicant() {
+  const q = query(collection(db, COL_REQUESTS), where("createdBy", "==", currentUser.uid));
+  unsubRequests = onSnapshot(q, (snap) => {
+    allRequests = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+    if (applicantSection === "mine") renderApplicantMineView();
   });
 }
 
