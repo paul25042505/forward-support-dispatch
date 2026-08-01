@@ -96,6 +96,42 @@
 
 貼上後按「發布」即可，不用動到其他部分。
 
+### ⚠️ 2026-08-01 新增：申請單位站（外部單位自行註冊／登入）—— 這段比較重要，牽涉到 `users` 集合
+
+前支任務系統現在有了外部申請單位自己的登入頁：**第一次用「單位代碼＋單位全銜＋承辦人資訊＋密碼」註冊**，之後**選單位＋輸入密碼登入**。技術上是用 Firebase Auth 的 Email/Password 登入方式，把「單位代碼」轉成一個內部合成的 email（例如 `a123@fsr.local`），不是申請單位真正的信箱。
+
+**這個功能需要兩件事，缺一都不能用：**
+
+**1. 先在 Firebase 主控台開通 Email/Password 登入方式**（這步不是規則，是另一個設定）：
+   - Firebase 主控台 → `medical-battalion-tracker` 專案 → Authentication → Sign-in method
+   - 找到 **Email/Password**，點進去開啟（Enable），儲存
+   - 如果沒開這個，申請單位註冊/登入時會看到「系統尚未開通申請單位登入方式」的錯誤
+
+**2. 規則要新增一小段，讓申請單位能自己建立 `users/{uid}` 這份文件**
+
+這段比較敏感，因為 `users` 集合是跟衛生營車輛人員系統共用的，所以我刻意把新增的權限縮到最小：**只允許使用者幫自己（`request.auth.uid == uid`）建立一份 `fsr_role` 剛好是 `'applicant'` 的文件，而且完全不能同時夾帶衛生營系統自己的 `role`／`unit` 欄位**，不會有辦法透過這個路徑幫自己生出衛生營系統那邊的高權限帳號。
+
+找到 `forward_support_*` 那個 functions 區塊（`fsrRole()`、`isFsrAdmin()` 那幾行），加上這個新 function：
+
+```
+    function isFsrSelfSignup() {
+      return isSignedIn() && request.auth.uid == uid
+        && request.resource.data.fsr_role == 'applicant'
+        && !('role' in request.resource.data)
+        && !('unit' in request.resource.data);
+    }
+```
+
+然後找到 `match /users/{uid} { ... }` 區塊裡的 `allow create` 那一段（結尾應該類似 `... && sameUnit(request.resource.data.unit))));`），在最後一個 `||` 條件後面、右括號 `;` 之前，加上這一行（記得補上 `||`）：
+
+```
+                    || isFsrSelfSignup();
+```
+
+貼完兩處後按「發布」。`forward_support_units`（單位代碼目錄）跟 `forward_support_requests`（申請單位送出任務）用的規則，第 5 版都已經涵蓋了，不用再改。
+
+**已知限制：** 「更多」頁申請單位卡片上的「寄送重設密碼信」按鈕，是很早之前假設申請單位有真實信箱時做的，現在申請單位用的是假的 `@fsr.local` 信箱，那封信會寄到一個不存在的地方、對方永遠收不到。如果之後需要「幫申請單位重設密碼」，需要另外做（例如 Cloud Functions + Firebase Admin SDK 才能改別人的密碼，用目前的環境做不到），先讓管理者知道這個按鈕對申請單位帳號目前是無效的。
+
 ---
 
 ## 第 1～4 版（歷史記錄，已被第 5 版取代，僅供參考）
