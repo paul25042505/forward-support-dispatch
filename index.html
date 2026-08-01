@@ -64,7 +64,6 @@
   .field{margin-bottom:14px}
   .field label{display:block;font-family:'JetBrains Mono';font-size:10.5px;color:var(--muted);letter-spacing:.06em;margin-bottom:6px}
   .field input, .field select, .field textarea{width:100%;max-width:100%;min-width:0;min-height:44px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:11px 12px;font-size:13.5px;color:var(--text)}
-  .field input[type="datetime-local"]{-webkit-appearance:none;appearance:none}
   .field textarea{resize:vertical;min-height:64px}
   .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 
@@ -188,7 +187,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-08-01.8";
+const BUILD_VERSION = "2026-08-01.9";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -607,6 +606,27 @@ function renderHomeView() {
 }
 
 function tsToDate(ts) { return ts.toDate ? ts.toDate() : new Date(ts); }
+
+// ---- 共用：日期 + 半小時時間選單（iOS Safari 的原生 datetime-local 選擇器不會照 step
+// 限制分鐘，只能自己拆成日期輸入框 + 半小時一格的下拉選單，強制卡在整點/半點）----
+function toDateValue(d) {
+  const p = n => String(n).padStart(2,"0");
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
+}
+function toHalfHourTimeValue(d) {
+  const p = n => String(n).padStart(2,"0");
+  return `${p(d.getHours())}:${d.getMinutes() < 30 ? "00" : "30"}`;
+}
+function halfHourTimeOptionsHtml(selected) {
+  let html = `<option value="">請選擇時間</option>`;
+  for (let h = 0; h < 24; h++) {
+    for (const m of [0, 30]) {
+      const v = `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}`;
+      html += `<option value="${v}"${v === selected ? " selected" : ""}>${v}</option>`;
+    }
+  }
+  return html;
+}
 function isThisWeek(d) {
   const now = new Date();
   const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay());
@@ -827,8 +847,12 @@ function renderDispatcherCreateView() {
       <div class="field"><label>申請人姓名（選填）</label><input id="cName" placeholder="例：陳○○"></div>
     </div>
     <div class="field"><label>任務地點</label><input id="cLoc" placeholder="請輸入地點"></div>
-    <div class="field"><label>開始時間</label><input id="cStart" type="datetime-local" step="1800"></div>
-    <div class="field"><label>結束時間</label><input id="cEnd" type="datetime-local" step="1800"></div>
+    <div class="field"><label>開始時間</label>
+      <div class="row2"><input id="cStartDate" type="date"><select id="cStartTime">${halfHourTimeOptionsHtml("")}</select></div>
+    </div>
+    <div class="field"><label>結束時間</label>
+      <div class="row2"><input id="cEndDate" type="date"><select id="cEndTime">${halfHourTimeOptionsHtml("")}</select></div>
+    </div>
     <div class="field"><label>備註（選填）</label><textarea id="cRemarks"></textarea></div>
     <div class="field"><label>前支種類（選填）</label>${tagPickerHtml("cTagPicker", null)}</div>
     <div class="field"><label>直接分發給（選填，不選則先進待審核）</label>
@@ -853,16 +877,18 @@ async function doDispatcherCreate() {
   const rank = document.getElementById("cRank").value.trim();
   const name = document.getElementById("cName").value.trim();
   const loc = document.getElementById("cLoc").value.trim();
-  const start = document.getElementById("cStart").value;
-  const end = document.getElementById("cEnd").value;
+  const startDate = document.getElementById("cStartDate").value;
+  const startTime = document.getElementById("cStartTime").value;
+  const endDate = document.getElementById("cEndDate").value;
+  const endTime = document.getElementById("cEndTime").value;
   const remarks = document.getElementById("cRemarks").value.trim();
   const assign = document.getElementById("cAssign").value;
-  if (!taskName || !unit || !loc || !start || !end) {
+  if (!taskName || !unit || !loc || !startDate || !startTime || !endDate || !endTime) {
     msg.innerHTML = `<div class="msg error">請完整填寫必填欄位</div>`; return;
   }
   try {
-    const startTs = new Date(start);
-    const endTs = new Date(end);
+    const startTs = new Date(`${startDate}T${startTime}`);
+    const endTs = new Date(`${endDate}T${endTime}`);
     await addDoc(collection(db, COL_REQUESTS), {
       taskName,
       applicantUnit: unit, applicantRank: rank, applicantName: name,
@@ -880,7 +906,7 @@ async function doDispatcherCreate() {
       reviewedAt: assign ? serverTimestamp() : null,
     });
     msg.innerHTML = `<div class="msg ok">任務已建立</div>`;
-    ["cTaskName","cUnit","cRank","cName","cLoc","cStart","cEnd","cRemarks"].forEach(id => document.getElementById(id).value = "");
+    ["cTaskName","cUnit","cRank","cName","cLoc","cStartDate","cStartTime","cEndDate","cEndTime","cRemarks"].forEach(id => document.getElementById(id).value = "");
     document.getElementById("cAssign").value = "";
     pickedTagId = null;
     document.querySelectorAll("#cTagPicker .tag-pick-chip").forEach(c => c.classList.remove("selected"));
@@ -890,16 +916,11 @@ async function doDispatcherCreate() {
 }
 
 // ---- 子頁：編輯任務 ----
-function toDatetimeLocalValue(d) {
-  const p = n => String(n).padStart(2,"0");
-  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
-}
-
 function renderEditTaskView(r) {
   pickedTagId = r.tagId || null;
   const c = document.getElementById("content");
-  const startVal = r.taskStartTime ? toDatetimeLocalValue(tsToDate(r.taskStartTime)) : "";
-  const endVal = r.taskEndTime ? toDatetimeLocalValue(tsToDate(r.taskEndTime)) : "";
+  const startDate = r.taskStartTime ? tsToDate(r.taskStartTime) : null;
+  const endDate = r.taskEndTime ? tsToDate(r.taskEndTime) : null;
   c.innerHTML = `
     <button class="icon-btn" id="backFromEdit" aria-label="返回" style="margin-bottom:14px">${ICON_BACK}</button>
     <div id="editMsg"></div>
@@ -910,8 +931,12 @@ function renderEditTaskView(r) {
       <div class="field"><label>申請人姓名（選填）</label><input id="eName" value="${escapeHtml(r.applicantName || "")}"></div>
     </div>
     <div class="field"><label>任務地點</label><input id="eLoc" value="${escapeHtml(r.location || "")}"></div>
-    <div class="field"><label>開始時間</label><input id="eStart" type="datetime-local" value="${startVal}" step="1800"></div>
-    <div class="field"><label>結束時間</label><input id="eEnd" type="datetime-local" value="${endVal}" step="1800"></div>
+    <div class="field"><label>開始時間</label>
+      <div class="row2"><input id="eStartDate" type="date" value="${startDate ? toDateValue(startDate) : ""}"><select id="eStartTime">${halfHourTimeOptionsHtml(startDate ? toHalfHourTimeValue(startDate) : "")}</select></div>
+    </div>
+    <div class="field"><label>結束時間</label>
+      <div class="row2"><input id="eEndDate" type="date" value="${endDate ? toDateValue(endDate) : ""}"><select id="eEndTime">${halfHourTimeOptionsHtml(endDate ? toHalfHourTimeValue(endDate) : "")}</select></div>
+    </div>
     <div class="field"><label>備註（選填）</label><textarea id="eRemarks">${escapeHtml(r.remarks || "")}</textarea></div>
     <div class="field"><label>前支種類（選填）</label>${tagPickerHtml("eTagPicker", r.tagId || null)}</div>
     <button class="btn btn-primary" id="saveEditBtn">儲存修改</button>`;
@@ -928,10 +953,12 @@ async function doSaveEdit(taskId) {
   const rank = document.getElementById("eRank").value.trim();
   const name = document.getElementById("eName").value.trim();
   const loc = document.getElementById("eLoc").value.trim();
-  const start = document.getElementById("eStart").value;
-  const end = document.getElementById("eEnd").value;
+  const startDate = document.getElementById("eStartDate").value;
+  const startTime = document.getElementById("eStartTime").value;
+  const endDate = document.getElementById("eEndDate").value;
+  const endTime = document.getElementById("eEndTime").value;
   const remarks = document.getElementById("eRemarks").value.trim();
-  if (!taskName || !unit || !loc || !start || !end) {
+  if (!taskName || !unit || !loc || !startDate || !startTime || !endDate || !endTime) {
     msg.innerHTML = `<div class="msg error">請完整填寫必填欄位</div>`; return;
   }
   try {
@@ -939,8 +966,8 @@ async function doSaveEdit(taskId) {
       taskName,
       applicantUnit: unit, applicantRank: rank, applicantName: name,
       location: loc,
-      taskStartTime: new Date(start),
-      taskEndTime: new Date(end),
+      taskStartTime: new Date(`${startDate}T${startTime}`),
+      taskEndTime: new Date(`${endDate}T${endTime}`),
       remarks,
       ...currentPickedTag(),
     });
@@ -1564,8 +1591,12 @@ function renderApplicantSubmitView() {
     <div class="field"><label>承辦人級職（選填）</label><input id="apRank" value="${escapeHtml(profile.contactRank || "")}"></div>
     <div class="field"><label>承辦人姓名（選填）</label><input id="apName" value="${escapeHtml(profile.contactName || "")}"></div>
     <div class="field"><label>任務地點</label><input id="apLoc" placeholder="請輸入地點"></div>
-    <div class="field"><label>開始時間</label><input id="apStart" type="datetime-local" step="1800"></div>
-    <div class="field"><label>結束時間</label><input id="apEnd" type="datetime-local" step="1800"></div>
+    <div class="field"><label>開始時間</label>
+      <div class="row2"><input id="apStartDate" type="date"><select id="apStartTime">${halfHourTimeOptionsHtml("")}</select></div>
+    </div>
+    <div class="field"><label>結束時間</label>
+      <div class="row2"><input id="apEndDate" type="date"><select id="apEndTime">${halfHourTimeOptionsHtml("")}</select></div>
+    </div>
     <div class="field"><label>備註（選填）</label><textarea id="apRemarks"></textarea></div>
     <button class="btn btn-primary" id="apSubmitBtn">送出申請</button>`;
   document.getElementById("apSubmitBtn").onclick = doApplicantSubmit;
@@ -1577,10 +1608,12 @@ async function doApplicantSubmit() {
   const rank = document.getElementById("apRank").value.trim();
   const name = document.getElementById("apName").value.trim();
   const loc = document.getElementById("apLoc").value.trim();
-  const start = document.getElementById("apStart").value;
-  const end = document.getElementById("apEnd").value;
+  const startDate = document.getElementById("apStartDate").value;
+  const startTime = document.getElementById("apStartTime").value;
+  const endDate = document.getElementById("apEndDate").value;
+  const endTime = document.getElementById("apEndTime").value;
   const remarks = document.getElementById("apRemarks").value.trim();
-  if (!taskName || !loc || !start || !end) {
+  if (!taskName || !loc || !startDate || !startTime || !endDate || !endTime) {
     msg.innerHTML = `<div class="msg error">請完整填寫必填欄位</div>`; return;
   }
   try {
@@ -1589,8 +1622,8 @@ async function doApplicantSubmit() {
       applicantUnit: profile.fsr_unitName || "",
       applicantRank: rank, applicantName: name,
       location: loc,
-      taskStartTime: new Date(start),
-      taskEndTime: new Date(end),
+      taskStartTime: new Date(`${startDate}T${startTime}`),
+      taskEndTime: new Date(`${endDate}T${endTime}`),
       remarks,
       tagId: null, tagName: null, tagColor: null,
       status: "pending",
@@ -1602,7 +1635,7 @@ async function doApplicantSubmit() {
       reviewedAt: null,
     });
     msg.innerHTML = `<div class="msg ok">申請已送出</div>`;
-    ["apTaskName","apLoc","apStart","apEnd","apRemarks"].forEach(id => document.getElementById(id).value = "");
+    ["apTaskName","apLoc","apStartDate","apStartTime","apEndDate","apEndTime","apRemarks"].forEach(id => document.getElementById(id).value = "");
   } catch (e) {
     msg.innerHTML = `<div class="msg error">送出失敗：${e.message}</div>`;
   }
