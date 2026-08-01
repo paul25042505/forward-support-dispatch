@@ -188,7 +188,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-08-01.6";
+const BUILD_VERSION = "2026-08-01.7";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -401,13 +401,13 @@ function renderApplicantRegisterView() {
       <div id="authMsg">${gateErrorText ? `<div class="msg error">${gateErrorText}</div>` : ""}</div>
       <div class="field"><label>單位代碼</label><input id="arCode" placeholder="例：38724"></div>
       <div class="field"><label>單位全銜</label><input id="arUnitName" placeholder="例：陸軍第五地區支援指揮部衛生營"></div>
-      <div class="field"><label>承辦人級職（選填）</label>
+      <div class="field"><label>承辦人級職</label>
         <select id="arRank">
           <option value="">請選擇級職</option>
           ${RANK_OPTIONS.map(r => `<option value="${r}">${r}</option>`).join("")}
         </select>
       </div>
-      <div class="field"><label>承辦人姓名（選填）</label><input id="arName" placeholder="例：陳○○"></div>
+      <div class="field"><label>承辦人姓名</label><input id="arName" placeholder="例：陳○○"></div>
       <div class="field"><label>密碼（至少 6 碼）</label><input id="arPassword" type="password"></div>
       <button class="btn btn-primary" id="arRegisterBtn">註冊</button>
       <p style="text-align:center;margin-top:14px;font-size:12px"><a href="javascript:void(0)" id="arToLogin">已經註冊過？點此登入</a></p>
@@ -426,7 +426,7 @@ async function doApplicantRegister() {
   const rank = document.getElementById("arRank").value.trim();
   const name = document.getElementById("arName").value.trim();
   const password = document.getElementById("arPassword").value;
-  if (!code || !unitName || !password) { msg.innerHTML = `<div class="msg error">請完整填寫必填欄位</div>`; return; }
+  if (!code || !unitName || !rank || !name || !password) { msg.innerHTML = `<div class="msg error">請完整填寫必填欄位</div>`; return; }
   if (password.length < 6) { msg.innerHTML = `<div class="msg error">密碼至少需要 6 碼</div>`; return; }
   msg.innerHTML = `<div style="font-size:11px;color:var(--muted)">註冊中…</div>`;
   let cred = null;
