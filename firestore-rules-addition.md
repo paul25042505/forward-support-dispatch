@@ -129,6 +129,23 @@
 
 **已知限制：** 「更多」頁申請單位卡片上的「寄送重設密碼信」按鈕，是很早之前假設申請單位有真實信箱時做的，現在申請單位用的是假的 `@fsr.local` 信箱，那封信會寄到一個不存在的地方、對方永遠收不到。如果之後需要「幫申請單位重設密碼」，需要另外做（例如 Cloud Functions + Firebase Admin SDK 才能改別人的密碼，用目前的環境做不到），先讓管理者知道這個按鈕對申請單位帳號目前是無效的。
 
+### 2026-08-01 新增：調度員可以編輯已填寫的車長／駕駛
+
+「已完成」的任務現在多了「編輯車長／駕駛」按鈕，讓營部/一連/二連可以修正自己單位已經填過的車長駕駛資料，不用只能填一次、填錯了沒辦法改。這個動作是更新既有的 `forward_support_assignments` 文件，原本這個集合完全不開放 `update`，要放寬一點。
+
+找到 `match /forward_support_assignments/{aId} { ... }` 這個區塊，把這一行：
+```
+      allow update, delete: if false;
+```
+改成：
+```
+      allow update: if isFsrUnitRole() && resource.data.unit == fsrUnitLabel();
+      allow delete: if false;
+```
+（只放寬 update，delete 維持不開放。限定「自己單位」的資料才能改，不能改到別的單位填寫的內容。）
+
+貼上後按「發布」。
+
 ---
 
 ## 第 1～4 版（歷史記錄，已被第 5 版取代，僅供參考）
