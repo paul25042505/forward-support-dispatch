@@ -195,7 +195,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-08-01.26";
+const BUILD_VERSION = "2026-08-01.27";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -1034,7 +1034,11 @@ const ROLE_LABEL = { dispatcher:"業務承辦人", battalion_hq:"營部調度員
 const FSR_UNIT_TO_REAL_UNIT = { battalion_hq: "hq", company1: "co1", company2: "co2" };
 const REAL_UNIT_LABEL = { hq: "營部", co1: "第一連", co2: "第二連" };
 const SOLDIER_RANKS = ["上等兵", "一等兵", "二等兵"];
-function vehicleLabelOf(v) { return v.plateNumber || v.vehicleNumber || v.number || v.plate || v.licensePlate || v.name || v.id; }
+function vehicleLabelOf(v) {
+  return v.plateNumber || v.vehicleNumber || v.number || v.plate || v.licensePlate || v.callSign || v.code || v.tag
+    || Object.entries(v).filter(([k]) => k !== "unit" && k !== "id").map(([k, val]) => `${k}:${val}`).join(" ")
+    || v.id;
+}
 
 function renderMoreView() {
   editingTagId = null;
@@ -1797,10 +1801,38 @@ let fillTargetTask = null;
 let fillTargetDocId = null;
 let fillTargetRoleKey = null;
 let fillAllPersonnel = [];
+let fillAllVehicles = [];
 let fillOwnUnit = null;
 
 function fillPersonnelPool(crossUnit) {
   return crossUnit ? fillAllPersonnel : fillAllPersonnel.filter(u => u.unit === fillOwnUnit);
+}
+
+function fillVehiclePool(crossUnit) {
+  return crossUnit ? fillAllVehicles : fillAllVehicles.filter(v => v.unit === fillOwnUnit);
+}
+
+function vehicleOptionHtml(v) {
+  const label = vehicleLabelOf(v);
+  return `<option value="${escapeHtml(label)}">${escapeHtml(label)}</option>`;
+}
+
+function groupedVehicleOptionsHtml(pool, crossUnit) {
+  if (!crossUnit) return pool.map(vehicleOptionHtml).join("");
+  return Object.keys(REAL_UNIT_LABEL).map(unitKey => {
+    const group = pool.filter(v => v.unit === unitKey);
+    if (group.length === 0) return "";
+    return `<optgroup label="${escapeHtml(REAL_UNIT_LABEL[unitKey])}">${group.map(vehicleOptionHtml).join("")}</optgroup>`;
+  }).join("");
+}
+
+function renderFillVehicleOptions(presetValue, crossUnit) {
+  const vehicleSelect = document.getElementById("fillVehicleSelect");
+  const keep = presetValue !== undefined ? presetValue : vehicleSelect.value;
+  const pool = fillVehiclePool(crossUnit);
+  const labels = pool.map(vehicleLabelOf);
+  vehicleSelect.innerHTML = `<option value="">請選擇</option>` + groupedVehicleOptionsHtml(pool, crossUnit) + `<option value="__other__">其他（手動輸入）</option>`;
+  if (keep && (labels.includes(keep) || keep === "__other__")) vehicleSelect.value = keep;
 }
 
 function personnelOptionHtml(u) {
@@ -1838,27 +1870,27 @@ async function openFillSheet(r, existingDoc, roleKey) {
   const realUnit = FSR_UNIT_TO_REAL_UNIT[roleKey];
   fillOwnUnit = realUnit;
   fillAllPersonnel = [];
-  let vehicles = [];
+  fillAllVehicles = [];
   try {
     const [uSnap, vSnap] = await Promise.all([
       getDocs(collection(db, "users")),
-      getDocs(query(collection(db, "vehicles"), where("unit", "==", realUnit))),
+      getDocs(collection(db, "vehicles")),
     ]);
     fillAllPersonnel = uSnap.docs
       .map(d => ({ id: d.id, ...d.data() }))
       .filter(u => !["unclaimed", "pending", "disabled"].includes(u.role) && u.rank && u.displayName && u.unit)
       .sort((x, y) => rankWeight(x.rank) - rankWeight(y.rank) || (x.displayName || "").localeCompare(y.displayName || "", "zh-Hant"));
-    vehicles = vSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    fillAllVehicles = vSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter(v => v.unit);
   } catch (e) { /* 查無資料時仍顯示空白下拉選單 */ }
-
-  const vehicleLabels = vehicles.map(vehicleLabelOf);
-  const vehicleOptionHtml = vehicleLabels.map(label => `<option value="${escapeHtml(label)}">${escapeHtml(label)}</option>`).join("");
-  const existingVehicleKnown = a.vehicleNumber && vehicleLabels.includes(a.vehicleNumber);
 
   const matchInAll = (rank, name) => (rank && name) ? fillAllPersonnel.find(u => u.rank === rank && u.displayName === name) : undefined;
   const cmdMatch = matchInAll(a.vehicleCommanderRank, a.vehicleCommanderName);
   const drvMatch = matchInAll(a.driverRank, a.driverName);
   const needsCrossUnit = (cmdMatch && cmdMatch.unit !== fillOwnUnit) || (drvMatch && drvMatch.unit !== fillOwnUnit);
+
+  const vehicleMatch = a.vehicleNumber ? fillAllVehicles.find(v => vehicleLabelOf(v) === a.vehicleNumber) : undefined;
+  const needsCrossUnitVehicle = vehicleMatch && vehicleMatch.unit !== fillOwnUnit;
+  const initialVehicleValue = a.vehicleNumber ? (vehicleMatch ? a.vehicleNumber : "__other__") : "";
 
   const overlay = document.createElement("div");
   overlay.className = "sheet-overlay";
@@ -1877,11 +1909,10 @@ async function openFillSheet(r, existingDoc, roleKey) {
           <select id="fillDriverSelect"></select>
         </div>
         <div class="field"><label>車號</label>
-          <select id="fillVehicleSelect">
-            <option value="">請選擇</option>
-            ${vehicleOptionHtml}
-            <option value="__other__">其他（手動輸入）</option>
-          </select>
+          <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);margin-bottom:8px">
+            <input type="checkbox" id="fillVehicleCrossUnitToggle" ${needsCrossUnitVehicle ? "checked" : ""}>跨單位選車（顯示所有單位車輛）
+          </label>
+          <select id="fillVehicleSelect"></select>
           <input type="text" id="fillVehicleManual" placeholder="手動輸入車號" style="margin-top:8px;display:none">
         </div>
         <button class="btn btn-primary" id="fillConfirmBtn">確認送出</button>
@@ -1891,16 +1922,17 @@ async function openFillSheet(r, existingDoc, roleKey) {
   document.body.appendChild(overlay);
 
   renderFillPersonnelOptions(cmdMatch ? cmdMatch.id : "", drvMatch ? drvMatch.id : "", needsCrossUnit);
+  renderFillVehicleOptions(initialVehicleValue, needsCrossUnitVehicle);
 
   const vehicleSelect = document.getElementById("fillVehicleSelect");
   const vehicleManual = document.getElementById("fillVehicleManual");
-  if (existingVehicleKnown) {
-    vehicleSelect.value = a.vehicleNumber;
-  } else if (a.vehicleNumber) {
-    vehicleSelect.value = "__other__";
+  if (initialVehicleValue === "__other__") {
     vehicleManual.style.display = "block";
     vehicleManual.value = a.vehicleNumber;
   }
+  document.getElementById("fillVehicleCrossUnitToggle").onchange = (e) => {
+    renderFillVehicleOptions(undefined, e.target.checked);
+  };
   vehicleSelect.onchange = () => {
     vehicleManual.style.display = vehicleSelect.value === "__other__" ? "block" : "none";
   };
@@ -1920,6 +1952,7 @@ function closeFillSheet() {
   fillTargetDocId = null;
   fillTargetRoleKey = null;
   fillAllPersonnel = [];
+  fillAllVehicles = [];
   fillOwnUnit = null;
 }
 
