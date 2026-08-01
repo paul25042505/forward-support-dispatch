@@ -200,7 +200,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-08-01.37";
+const BUILD_VERSION = "2026-08-01.38";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -2178,6 +2178,7 @@ function renderApplicantProfileView() {
 
     <div class="section-lbl" style="margin-top:22px">修改密碼</div>
     <div class="card">
+      <div id="applicantPasswordMsg"></div>
       <div class="field"><label>目前密碼</label><input id="apfCurrentPassword" type="password"></div>
       <div class="field"><label>新密碼（至少 6 碼）</label><input id="apfNewPassword" type="password"></div>
       <button class="btn btn-primary" id="apfChangePwBtn">修改密碼</button>
@@ -2201,7 +2202,7 @@ async function saveApplicantProfile() {
 }
 
 async function changeApplicantPassword() {
-  const msg = document.getElementById("applicantProfileMsg");
+  const msg = document.getElementById("applicantPasswordMsg");
   const currentPassword = document.getElementById("apfCurrentPassword").value;
   const newPassword = document.getElementById("apfNewPassword").value;
   if (!currentPassword || !newPassword) { msg.innerHTML = `<div class="msg error">請輸入目前密碼與新密碼</div>`; return; }
