@@ -195,7 +195,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-08-01.23";
+const BUILD_VERSION = "2026-08-01.24";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -1032,7 +1032,9 @@ const RANK_WEIGHT = {
 function rankWeight(rank) { return RANK_WEIGHT[rank] ?? 999; }
 const ROLE_LABEL = { dispatcher:"業務承辦人", battalion_hq:"營部調度員", company1:"第一連調度員", company2:"第二連調度員", admin:"系統管理員" };
 const FSR_UNIT_TO_REAL_UNIT = { battalion_hq: "hq", company1: "co1", company2: "co2" };
+const REAL_UNIT_LABEL = { hq: "營部", co1: "第一連", co2: "第二連" };
 const SOLDIER_RANKS = ["上等兵", "一等兵", "二等兵"];
+function vehicleLabelOf(v) { return v.plateNumber || v.vehicleNumber || v.number || v.plate || v.licensePlate || v.name || v.id; }
 
 function renderMoreView() {
   editingTagId = null;
@@ -1794,6 +1796,30 @@ async function openEditFillForm(r, roleKey = profile.fsr_role) {
 let fillTargetTask = null;
 let fillTargetDocId = null;
 let fillTargetRoleKey = null;
+let fillAllPersonnel = [];
+let fillOwnUnit = null;
+
+function fillPersonnelPool(crossUnit) {
+  return crossUnit ? fillAllPersonnel : fillAllPersonnel.filter(u => u.unit === fillOwnUnit);
+}
+
+function personnelOptionHtml(u, crossUnit) {
+  const unitSuffix = crossUnit ? `（${REAL_UNIT_LABEL[u.unit] || u.unit}）` : "";
+  return `<option value="${u.id}" data-rank="${escapeHtml(u.rank || "")}" data-name="${escapeHtml(u.displayName || "")}">${escapeHtml(u.rank || "")} ${escapeHtml(u.displayName || "")}${unitSuffix}</option>`;
+}
+
+function renderFillPersonnelOptions(presetCommanderId, presetDriverId, crossUnit) {
+  const commanderSel = document.getElementById("fillCommanderSelect");
+  const driverSel = document.getElementById("fillDriverSelect");
+  const keepCommander = presetCommanderId !== undefined ? presetCommanderId : commanderSel.value;
+  const keepDriver = presetDriverId !== undefined ? presetDriverId : driverSel.value;
+  const pool = fillPersonnelPool(crossUnit);
+  const commanderPool = pool.filter(u => !SOLDIER_RANKS.includes(u.rank));
+  commanderSel.innerHTML = `<option value="">請選擇</option>` + commanderPool.map(u => personnelOptionHtml(u, crossUnit)).join("");
+  driverSel.innerHTML = `<option value="">請選擇</option>` + pool.map(u => personnelOptionHtml(u, crossUnit)).join("");
+  if (keepCommander && commanderPool.some(u => u.id === keepCommander)) commanderSel.value = keepCommander;
+  if (keepDriver && pool.some(u => u.id === keepDriver)) driverSel.value = keepDriver;
+}
 
 async function openFillSheet(r, existingDoc, roleKey) {
   fillTargetTask = r;
@@ -1802,20 +1828,29 @@ async function openFillSheet(r, existingDoc, roleKey) {
   const a = existingDoc ? existingDoc.data() : {};
 
   const realUnit = FSR_UNIT_TO_REAL_UNIT[roleKey];
-  let personnel = [];
+  fillOwnUnit = realUnit;
+  fillAllPersonnel = [];
+  let vehicles = [];
   try {
-    const snap = await getDocs(query(collection(db, "users"), where("unit", "==", realUnit)));
-    personnel = snap.docs
+    const [uSnap, vSnap] = await Promise.all([
+      getDocs(collection(db, "users")),
+      getDocs(query(collection(db, "vehicles"), where("unit", "==", realUnit))),
+    ]);
+    fillAllPersonnel = uSnap.docs
       .map(d => ({ id: d.id, ...d.data() }))
       .filter(u => !["unclaimed", "pending", "disabled"].includes(u.role))
       .sort((x, y) => rankWeight(x.rank) - rankWeight(y.rank) || (x.displayName || "").localeCompare(y.displayName || "", "zh-Hant"));
-  } catch (e) { /* 查無人員資料時仍顯示空白下拉選單 */ }
+    vehicles = vSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch (e) { /* 查無資料時仍顯示空白下拉選單 */ }
 
-  const commanderPool = personnel.filter(u => !SOLDIER_RANKS.includes(u.rank));
-  const optionHtml = (u) => `<option value="${u.id}" data-rank="${escapeHtml(u.rank || "")}" data-name="${escapeHtml(u.displayName || "")}">${escapeHtml(u.rank || "")} ${escapeHtml(u.displayName || "")}</option>`;
-  const findSelected = (pool, rank, name) => pool.find(u => u.rank === rank && u.displayName === name);
-  const selectedCommander = findSelected(commanderPool, a.vehicleCommanderRank, a.vehicleCommanderName);
-  const selectedDriver = findSelected(personnel, a.driverRank, a.driverName);
+  const vehicleLabels = vehicles.map(vehicleLabelOf);
+  const vehicleOptionHtml = vehicleLabels.map(label => `<option value="${escapeHtml(label)}">${escapeHtml(label)}</option>`).join("");
+  const existingVehicleKnown = a.vehicleNumber && vehicleLabels.includes(a.vehicleNumber);
+
+  const matchInAll = (rank, name) => fillAllPersonnel.find(u => u.rank === rank && u.displayName === name);
+  const cmdMatch = matchInAll(a.vehicleCommanderRank, a.vehicleCommanderName);
+  const drvMatch = matchInAll(a.driverRank, a.driverName);
+  const needsCrossUnit = (cmdMatch && cmdMatch.unit !== fillOwnUnit) || (drvMatch && drvMatch.unit !== fillOwnUnit);
 
   const overlay = document.createElement("div");
   overlay.className = "sheet-overlay";
@@ -1824,28 +1859,47 @@ async function openFillSheet(r, existingDoc, roleKey) {
     <div class="sheet">
       <div class="sheet-title">${escapeHtml(r.taskName || r.location || "")}</div>
       <div style="padding:16px 20px">
+        <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);margin-bottom:10px">
+          <input type="checkbox" id="fillCrossUnitToggle" ${needsCrossUnit ? "checked" : ""}>跨單位選人（顯示所有單位人員）
+        </label>
         <div class="field"><label>車長（不含士兵）</label>
-          <select id="fillCommanderSelect">
-            <option value="">請選擇</option>
-            ${commanderPool.map(optionHtml).join("")}
-          </select>
+          <select id="fillCommanderSelect"></select>
         </div>
         <div class="field"><label>駕駛</label>
-          <select id="fillDriverSelect">
-            <option value="">請選擇</option>
-            ${personnel.map(optionHtml).join("")}
-          </select>
+          <select id="fillDriverSelect"></select>
         </div>
-        <div class="field"><label>車號（選填）</label>
-          <input type="text" id="fillVehicleNumber" value="${escapeHtml(a.vehicleNumber || "")}">
+        <div class="field"><label>車號</label>
+          <select id="fillVehicleSelect">
+            <option value="">請選擇</option>
+            ${vehicleOptionHtml}
+            <option value="__other__">其他（手動輸入）</option>
+          </select>
+          <input type="text" id="fillVehicleManual" placeholder="手動輸入車號" style="margin-top:8px;display:none">
         </div>
         <button class="btn btn-primary" id="fillConfirmBtn">確認送出</button>
         <button class="back-link" id="fillCancelBtn" style="display:block;text-align:center;margin:10px auto 0">取消</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
-  if (selectedCommander) document.getElementById("fillCommanderSelect").value = selectedCommander.id;
-  if (selectedDriver) document.getElementById("fillDriverSelect").value = selectedDriver.id;
+
+  renderFillPersonnelOptions(cmdMatch ? cmdMatch.id : "", drvMatch ? drvMatch.id : "", needsCrossUnit);
+
+  const vehicleSelect = document.getElementById("fillVehicleSelect");
+  const vehicleManual = document.getElementById("fillVehicleManual");
+  if (existingVehicleKnown) {
+    vehicleSelect.value = a.vehicleNumber;
+  } else if (a.vehicleNumber) {
+    vehicleSelect.value = "__other__";
+    vehicleManual.style.display = "block";
+    vehicleManual.value = a.vehicleNumber;
+  }
+  vehicleSelect.onchange = () => {
+    vehicleManual.style.display = vehicleSelect.value === "__other__" ? "block" : "none";
+  };
+
+  document.getElementById("fillCrossUnitToggle").onchange = (e) => {
+    renderFillPersonnelOptions(undefined, undefined, e.target.checked);
+  };
   overlay.addEventListener("click", (e) => { if (e.target === overlay) closeFillSheet(); });
   document.getElementById("fillCancelBtn").onclick = closeFillSheet;
   document.getElementById("fillConfirmBtn").onclick = doFillConfirm;
@@ -1857,6 +1911,8 @@ function closeFillSheet() {
   fillTargetTask = null;
   fillTargetDocId = null;
   fillTargetRoleKey = null;
+  fillAllPersonnel = [];
+  fillOwnUnit = null;
 }
 
 async function doFillConfirm() {
@@ -1867,7 +1923,9 @@ async function doFillConfirm() {
   if (!commanderSel.value || !driverSel.value) { alert("請選擇車長與駕駛"); return; }
   const commanderOpt = commanderSel.selectedOptions[0];
   const driverOpt = driverSel.selectedOptions[0];
-  const vehicleNumber = document.getElementById("fillVehicleNumber").value.trim();
+  const vehicleSelect = document.getElementById("fillVehicleSelect");
+  const vehicleManual = document.getElementById("fillVehicleManual");
+  const vehicleNumber = vehicleSelect.value === "__other__" ? vehicleManual.value.trim() : vehicleSelect.value;
   const commanderRank = commanderOpt.dataset.rank, commanderName = commanderOpt.dataset.name;
   const driverRank = driverOpt.dataset.rank, driverName = driverOpt.dataset.name;
   try {
