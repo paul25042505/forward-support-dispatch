@@ -214,6 +214,32 @@
 
 貼上後按「發布」。
 
+### 2026-08-01 新增：任務卡片直接顯示車長／駕駛的證照與電話
+
+車長／駕駛的證照等級跟手機號碼，現在會額外複製一份存在 `forward_support_requests` 這筆任務文件本身（不是只存在 `forward_support_assignments`），這樣任何看得到這筆任務卡片的人（承辦人、調度員、甚至申請單位自己查「我的申請」）都能直接在卡片上看到聯絡方式。
+
+因為調度員「編輯車長／駕駛」時，任務狀態原本就已經是 `filled`、改完還是 `filled`（不像第一次填寫是從 `assigned` 變成 `filled`），原本的規則只放行「狀態從 assigned 變成 filled」這一種情況，編輯已經 filled 的任務會被擋下來，需要放寬。
+
+找到 `match /forward_support_requests/{reqId} { ... }` 這個區塊，把這段：
+```
+      allow update: if isFsrDispatcher()
+        || (isFsrUnitRole() && resource.data.assignedUnit == fsrUnitLabel()
+            && resource.data.status == 'assigned'
+            && request.resource.data.status == 'filled');
+```
+改成：
+```
+      allow update: if isFsrDispatcher()
+        || (isFsrUnitRole() && resource.data.assignedUnit == fsrUnitLabel()
+            && resource.data.status == 'assigned'
+            && request.resource.data.status == 'filled')
+        || (isFsrUnitRole() && resource.data.assignedUnit == fsrUnitLabel()
+            && resource.data.status == 'filled'
+            && request.resource.data.status == 'filled');
+```
+
+貼上後按「發布」。
+
 ---
 
 ## 第 1～4 版（歷史記錄，已被第 5 版取代，僅供參考）
