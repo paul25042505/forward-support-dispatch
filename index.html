@@ -13,14 +13,14 @@
   :root{
     --bg:#f2f4f8; --panel:#ffffff; --panel2:#eef1f7; --line:#dce1eb;
     --text:#171b26; --muted:#6b7488; --accent:#d9631f; --blue:#2f6fe0;
-    --green:#1f9d5c; --amber:#c98a0e; --red:#d64545; --shadow:0 1px 3px rgba(20,25,40,.05);
+    --green:#1f9d5c; --amber:#c98a0e; --red:#d64545; --purple:#8b5cf6; --cyan:#0891b2; --shadow:0 1px 3px rgba(20,25,40,.05);
     --fab-text:#fff; --app-max-width:480px; --page-bg:var(--bg);
   }
   @media (prefers-color-scheme: dark){
     :root{
       --bg:#0c1220; --panel:#131b2e; --panel2:#182238; --line:#26314a;
       --text:#e7ecf6; --muted:#7e8aa8; --accent:#ff8c42; --blue:#4f8bff;
-      --green:#3ddc84; --amber:#ffcf5c; --red:#ff5a5a; --shadow:none;
+      --green:#3ddc84; --amber:#ffcf5c; --red:#ff5a5a; --purple:#a78bfa; --cyan:#22d3ee; --shadow:none;
       --fab-text:#111;
     }
   }
@@ -52,6 +52,8 @@
   .id{font-family:'JetBrains Mono';font-size:10.5px;color:var(--muted)}
   .tag{font-family:'JetBrains Mono';font-size:10px;padding:3px 8px;border-radius:3px;display:inline-flex;align-items:center;gap:4px;font-weight:600;white-space:nowrap}
   .tag.pending{background:color-mix(in srgb, var(--amber) 14%, transparent);color:var(--amber)}
+  .tag.reviewing{background:color-mix(in srgb, var(--purple) 14%, transparent);color:var(--purple)}
+  .tag.approved{background:color-mix(in srgb, var(--cyan) 14%, transparent);color:var(--cyan)}
   .tag.assigned{background:color-mix(in srgb, var(--blue) 14%, transparent);color:var(--blue)}
   .tag.filled{background:color-mix(in srgb, var(--green) 14%, transparent);color:var(--green)}
   .tag.rejected{background:color-mix(in srgb, var(--red) 14%, transparent);color:var(--red)}
@@ -88,11 +90,11 @@
   .stat .l{font-size:10px;color:var(--muted);margin-top:2px}
   .stat.amber .n{color:var(--amber)} .stat.blue .n{color:var(--blue)} .stat.green .n{color:var(--green)}
 
-  .status-cards{display:flex;gap:8px;margin-bottom:16px}
-  .status-card{flex:1;min-width:0;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:11px 4px;text-align:center;cursor:pointer}
+  .status-cards{display:flex;gap:8px;margin-bottom:16px;overflow-x:auto}
+  .status-card{flex:0 0 auto;width:84px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:11px 4px;text-align:center;cursor:pointer}
   .status-card .n{font-family:'JetBrains Mono';font-size:19px;font-weight:700}
   .status-card .l{font-size:10px;color:var(--muted);margin-top:2px}
-  .status-card.amber .n{color:var(--amber)} .status-card.blue .n{color:var(--blue)} .status-card.green .n{color:var(--green)} .status-card.gray .n{color:var(--text)}
+  .status-card.amber .n{color:var(--amber)} .status-card.purple .n{color:var(--purple)} .status-card.cyan .n{color:var(--cyan)} .status-card.blue .n{color:var(--blue)} .status-card.green .n{color:var(--green)} .status-card.gray .n{color:var(--text)}
 
   .more-menu{display:grid;grid-template-columns:1fr 1fr;gap:12px}
   .more-card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px 14px;text-align:center;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:10px;color:var(--muted);box-shadow:var(--shadow)}
@@ -192,7 +194,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-08-01.18";
+const BUILD_VERSION = "2026-08-01.19";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -235,7 +237,7 @@ const ICON_PRESET = `<svg viewBox="0 0 24 24" width="26" height="26" fill="none"
 const ICON_SHARE = `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4M8 8l4-4 4 4"/><path d="M4 13v6a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6"/></svg>`;
 
 const UNITS_INTERNAL = ["營部", "一連", "二連"];
-const STATUS_LABEL = { pending:"待審核", assigned:"已分發", filled:"已完成", rejected:"不核准" };
+const STATUS_LABEL = { pending:"待審核", reviewing:"審核中，待收公文", approved:"已核定，等待派遣人員", assigned:"已派遣", filled:"任務完成", rejected:"不核准" };
 const VALID_INTERNAL_ROLES = ["dispatcher", "battalion_hq", "company1", "company2", "admin"];
 const RANK_OPTIONS = ["中校","少校","上尉","中尉","少尉","士官長","上士","中士","下士","上等兵","一等兵","二等兵"];
 
@@ -594,27 +596,31 @@ function renderDispatcherSection() {
   else if (activeSection === "edit") renderEditTaskView(editingTask);
 }
 
-// ---- 子頁：首頁（待審核任務 + 本週任務總覽）----
+// ---- 子頁：首頁（待處理任務 + 本週任務總覽）----
 function renderHomeView() {
   const c = document.getElementById("content");
-  const pending = allRequests.filter(r => r.status === "pending");
+  const needsAction = allRequests.filter(r => ["pending","reviewing","approved"].includes(r.status));
   const weekTasks = allRequests.filter(r => r.taskStartTime && isThisWeek(tsToDate(r.taskStartTime)));
   const statsHtml = `
     <div class="stats">
-      <div class="stat amber"><div class="n">${pending.length}</div><div class="l">待審核</div></div>
+      <div class="stat amber"><div class="n">${needsAction.length}</div><div class="l">待處理</div></div>
       <div class="stat blue"><div class="n">${weekTasks.length}</div><div class="l">本週任務</div></div>
     </div>`;
-  const pendingHtml = pending.length === 0
-    ? `<div class="empty">目前沒有待審核任務</div>`
-    : pending.map(r => taskCardHtml(r, true)).join("");
+  const pendingHtml = needsAction.length === 0
+    ? `<div class="empty">目前沒有待處理任務</div>`
+    : needsAction.map(r => taskCardHtml(r, true)).join("");
   const weekHtml = weekTasks.length === 0
     ? `<div class="empty">本週目前沒有排定的任務</div>`
     : weekTasks.map(r => taskCardHtml(r, false)).join("");
   c.innerHTML = statsHtml +
-    `<div class="section-lbl">待審核</div>${pendingHtml}` +
+    `<div class="section-lbl">待處理</div>${pendingHtml}` +
     `<div class="section-lbl" style="margin-top:22px">本週任務</div>${weekHtml}`;
   bindCardMenu(c);
-  pending.forEach(r => {
+  needsAction.forEach(r => {
+    const reviewBtn = document.getElementById(`review-${r.id}`);
+    if (reviewBtn) reviewBtn.onclick = () => startReviewRequest(r);
+    const approveBtn = document.getElementById(`approve-${r.id}`);
+    if (approveBtn) approveBtn.onclick = () => approveRequest(r);
     const assignBtn = document.getElementById(`assign-${r.id}`);
     if (assignBtn) assignBtn.onclick = () => openAssignPrompt(r);
     const rejectBtn = document.getElementById(`reject-${r.id}`);
@@ -678,7 +684,7 @@ function renderDispatcherTasksView() {
 function renderTaskListSubview() {
   const area = document.getElementById("taskViewArea");
   area.innerHTML = `<div id="taskListArea"></div>`;
-  if (!activeTab || !["pending","assigned","filled","all"].includes(activeTab)) activeTab = "pending";
+  if (!activeTab || !["pending","reviewing","approved","assigned","filled","all"].includes(activeTab)) activeTab = "pending";
   renderDispatcherContent();
 }
 
@@ -687,13 +693,17 @@ function renderDispatcherContent() {
   if (!area) return;
   const counts = {
     pending: allRequests.filter(r=>r.status==="pending").length,
+    reviewing: allRequests.filter(r=>r.status==="reviewing").length,
+    approved: allRequests.filter(r=>r.status==="approved").length,
     assigned: allRequests.filter(r=>r.status==="assigned").length,
     filled: allRequests.filter(r=>r.status==="filled").length,
   };
   const statCards = [
     { key:"pending", cls:"amber", label:"待審核", n:counts.pending },
-    { key:"assigned", cls:"blue", label:"已分發", n:counts.assigned },
-    { key:"filled", cls:"green", label:"已完成", n:counts.filled },
+    { key:"reviewing", cls:"purple", label:"審核中", n:counts.reviewing },
+    { key:"approved", cls:"cyan", label:"已核定", n:counts.approved },
+    { key:"assigned", cls:"blue", label:"已派遣", n:counts.assigned },
+    { key:"filled", cls:"green", label:"任務完成", n:counts.filled },
     { key:"all", cls:"gray", label:"全部", n:allRequests.length },
   ];
   const statsHtml = `
@@ -706,6 +716,10 @@ function renderDispatcherContent() {
   document.querySelectorAll("#taskListArea .status-card").forEach(el => el.onclick = () => { activeTab = el.dataset.tab; renderDispatcherContent(); });
   bindCardMenu(area);
   list.forEach(r => {
+    const reviewBtn = document.getElementById(`review-${r.id}`);
+    if (reviewBtn) reviewBtn.onclick = () => startReviewRequest(r);
+    const approveBtn = document.getElementById(`approve-${r.id}`);
+    if (approveBtn) approveBtn.onclick = () => approveRequest(r);
     const assignBtn = document.getElementById(`assign-${r.id}`);
     if (assignBtn) assignBtn.onclick = () => openAssignPrompt(r);
     const rejectBtn = document.getElementById(`reject-${r.id}`);
@@ -773,9 +787,13 @@ function renderCalendarView() {
     return;
   }
   listEl.innerHTML = `<div class="section-lbl">${selectedCalendarDate} ・ 共 ${list.length} 筆</div>` +
-    list.map(r => taskCardHtml(r, r.status === "pending")).join("");
+    list.map(r => taskCardHtml(r, ["pending","reviewing","approved"].includes(r.status))).join("");
   bindCardMenu(listEl);
   list.forEach(r => {
+    const reviewBtn = document.getElementById(`review-${r.id}`);
+    if (reviewBtn) reviewBtn.onclick = () => startReviewRequest(r);
+    const approveBtn = document.getElementById(`approve-${r.id}`);
+    if (approveBtn) approveBtn.onclick = () => approveRequest(r);
     const assignBtn = document.getElementById(`assign-${r.id}`);
     if (assignBtn) assignBtn.onclick = () => openAssignPrompt(r);
     const rejectBtn = document.getElementById(`reject-${r.id}`);
@@ -1426,15 +1444,29 @@ async function sendResetPassword(a) {
   } catch (e) { alert("寄送失敗：" + e.message); }
 }
 
+async function startReviewRequest(r) {
+  try {
+    await updateDoc(doc(db, COL_REQUESTS, r.id), { status: "reviewing" });
+  } catch (e) { alert("操作失敗：" + e.message); }
+}
+
+async function approveRequest(r) {
+  try {
+    await updateDoc(doc(db, COL_REQUESTS, r.id), {
+      status: "approved", reviewedBy: currentUser.uid, reviewedAt: serverTimestamp(),
+    });
+  } catch (e) { alert("操作失敗：" + e.message); }
+}
+
 async function openAssignPrompt(r) {
-  const choice = prompt("分發給哪個單位？請輸入：營部 / 一連 / 二連", "營部");
+  const choice = prompt("派遣給哪個單位？請輸入：營部 / 一連 / 二連", "營部");
   if (!choice || !UNITS_INTERNAL.includes(choice.trim())) { if (choice!==null) alert("請輸入正確單位名稱：營部、一連 或 二連"); return; }
   try {
     await updateDoc(doc(db, COL_REQUESTS, r.id), {
       status: "assigned", assignedUnit: choice.trim(),
       reviewedBy: currentUser.uid, reviewedAt: serverTimestamp(),
     });
-  } catch (e) { alert("分發失敗：" + e.message); }
+  } catch (e) { alert("派遣失敗：" + e.message); }
 }
 
 async function rejectRequest(r) {
@@ -1798,13 +1830,22 @@ function watchRequestsForApplicant() {
 // ==============================================================
 function taskCardHtml(r, withDispatchActions=false, withFillAction=false) {
   const start = fmtTs(r.taskStartTime), end = fmtTs(r.taskEndTime);
-  const tagClass = r.status === "pending" ? "pending" : r.status === "assigned" ? "assigned" : r.status === "filled" ? "filled" : "rejected";
+  const tagClass = ["pending","reviewing","approved","assigned","filled"].includes(r.status) ? r.status : "rejected";
   let actions = "";
   if (withDispatchActions && r.status === "pending") {
     actions = `<div class="actions">
-      <button class="btn btn-small btn-green" id="assign-${r.id}">分發</button>
+      <button class="btn btn-small btn-blue" id="review-${r.id}">開始審核</button>
       <button class="btn btn-small btn-red" id="reject-${r.id}">駁回</button>
     </div>`;
+  }
+  if (withDispatchActions && r.status === "reviewing") {
+    actions = `<div class="actions">
+      <button class="btn btn-small btn-green" id="approve-${r.id}">核定</button>
+      <button class="btn btn-small btn-red" id="reject-${r.id}">駁回</button>
+    </div>`;
+  }
+  if (withDispatchActions && r.status === "approved") {
+    actions = `<div class="actions"><button class="btn btn-small btn-green" id="assign-${r.id}">派遣</button></div>`;
   }
   if (withFillAction && r.status === "assigned") {
     actions = `<div class="actions"><button class="btn btn-small btn-blue" id="fill-${r.id}">填寫車長／駕駛</button></div>`;
