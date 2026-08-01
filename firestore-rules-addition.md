@@ -186,6 +186,34 @@
 
 貼上後按「發布」。
 
+### 2026-08-01 新增：LINE ID 欄位、忘記密碼聯絡窗口
+
+申請單位註冊／單位資料頁多了「LINE ID」欄位（選填），另外登入頁新增「忘記密碼？」連結，點下去會顯示管理員在「更多」頁設定好的業務承辦人聯絡資訊（級職／姓名／電話），不是寄信（申請單位用的是假信箱，寄信沒有用，見上面已知限制）。
+
+**1. 放寬申請單位可以自己改的欄位**，把上一節加的這行：
+```
+      allow update: if isFsrAdmin()
+        || (isSignedIn() && request.auth.uid == uid
+            && onlyChanged(['contactRank', 'contactName', 'contactPhone']));
+```
+改成：
+```
+      allow update: if isFsrAdmin()
+        || (isSignedIn() && request.auth.uid == uid
+            && onlyChanged(['contactRank', 'contactName', 'contactPhone', 'contactLineId']));
+```
+
+**2. 新增聯絡窗口集合**，在 `match /databases/{database}/documents { ... }` 區塊最後面加上：
+```
+    match /forward_support_contact/{id} {
+      allow read: if true;
+      allow write: if isFsrAdmin();
+    }
+```
+（`allow read: if true` 是故意的：申請單位就是登入不了才需要看這份資料，只公開這一份精簡的聯絡卡片，不會公開衛生營系統的完整人員名冊。）
+
+貼上後按「發布」。
+
 ---
 
 ## 第 1～4 版（歷史記錄，已被第 5 版取代，僅供參考）

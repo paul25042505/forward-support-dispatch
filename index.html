@@ -200,7 +200,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-08-01.35";
+const BUILD_VERSION = "2026-08-01.36";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -223,6 +223,7 @@ const COL_UNITS = "forward_support_units";
 const COL_TAGS = "forward_support_tags";
 const COL_PRESETS = "forward_support_task_presets";
 const COL_APPLICANT_PROFILES = "forward_support_applicant_profiles";
+const COL_CONTACT = "forward_support_contact";
 const APPLICANT_EMAIL_DOMAIN = "fsr.local";
 
 const TAG_COLOR_PALETTE = ["#d9631f","#2f6fe0","#1f9d5c","#c98a0e","#d64545","#8b5cf6","#0891b2","#db2777"];
@@ -273,6 +274,7 @@ let availableTags = [];   // 前支種類標籤快取
 let editingTagId = null;  // 更多頁目前正在編輯（展開顏色選取）的標籤
 let editingInternalId = null; // 更多頁目前正在編輯角色的內部人員 uid
 let editingApplicantId = null; // 更多頁目前正在編輯單位名稱的申請單位帳號 uid
+let forgotPasswordContact = null; // 申請單位登入頁「忘記密碼」顯示的業務承辦人聯絡資訊快取
 let unsubTags = null;
 let pickedTagId = null;   // 新增／編輯任務表單目前選取的標籤
 let availablePresets = []; // 常用任務名稱快取
@@ -407,12 +409,14 @@ function renderApplicantLoginView() {
       <div class="field"><label>密碼</label><input id="alPassword" type="password"></div>
       <button class="btn btn-primary" id="alLoginBtn">登入</button>
       <p style="text-align:center;margin-top:14px;font-size:12px"><a href="javascript:void(0)" id="alToRegister">還沒註冊？點此註冊單位帳號</a></p>
+      <p style="text-align:center;margin-top:8px;font-size:12px"><a href="javascript:void(0)" id="alForgotPassword">忘記密碼？</a></p>
       <p style="text-align:center;margin-top:8px;font-size:12px"><a href="javascript:void(0)" id="alBackToInternal">← 返回內部人員登入</a></p>
     </div>`;
   gateErrorText = null;
   document.getElementById("alBackToInternal").onclick = () => { loginMode = "internal"; renderLogin(); };
   document.getElementById("alToRegister").onclick = () => { loginMode = "applicantRegister"; renderLogin(); };
   document.getElementById("alLoginBtn").onclick = doApplicantLogin;
+  document.getElementById("alForgotPassword").onclick = showForgotPasswordContact;
   loadUnitDirectoryIntoSelect("alUnit");
 }
 
@@ -426,6 +430,22 @@ async function doApplicantLogin() {
     await signInWithEmailAndPassword(auth, unitCodeToEmail(code), password);
   } catch (e) {
     msg.innerHTML = `<div class="msg error">登入失敗：${applicantAuthErrorText(e)}</div>`;
+  }
+}
+
+async function showForgotPasswordContact() {
+  const msg = document.getElementById("authMsg");
+  msg.innerHTML = `<div style="font-size:11px;color:var(--muted)">查詢中…</div>`;
+  try {
+    const snap = await getDoc(doc(db, COL_CONTACT, "main"));
+    const c = snap.exists() ? snap.data() : {};
+    if (!c.name && !c.phone) {
+      msg.innerHTML = `<div class="msg error">尚未設定聯絡窗口，請洽系統管理員</div>`;
+      return;
+    }
+    msg.innerHTML = `<div class="msg ok">密碼問題請洽業務承辦人：${escapeHtml(c.rank || "")} ${escapeHtml(c.name || "")}${c.phone ? "，電話｜" + escapeHtml(c.phone) : ""}</div>`;
+  } catch (e) {
+    msg.innerHTML = `<div class="msg error">查詢失敗：${e.message}</div>`;
   }
 }
 
@@ -446,6 +466,7 @@ function renderApplicantRegisterView() {
       </div>
       <div class="field"><label>承辦人姓名</label><input id="arName" placeholder="例：陳○○"></div>
       <div class="field"><label>承辦人手機號碼</label><input id="arPhone" type="tel" placeholder="例：0912345678"></div>
+      <div class="field"><label>承辦人 LINE ID（選填）</label><input id="arLineId" placeholder="例：abc123"></div>
       <div class="field"><label>密碼（至少 6 碼）</label><input id="arPassword" type="password"></div>
       <button class="btn btn-primary" id="arRegisterBtn">註冊</button>
       <p style="text-align:center;margin-top:14px;font-size:12px"><a href="javascript:void(0)" id="arToLogin">已經註冊過？點此登入</a></p>
@@ -464,6 +485,7 @@ async function doApplicantRegister() {
   const rank = document.getElementById("arRank").value.trim();
   const name = document.getElementById("arName").value.trim();
   const phone = document.getElementById("arPhone").value.trim();
+  const lineId = document.getElementById("arLineId").value.trim();
   const password = document.getElementById("arPassword").value;
   if (!code || !unitName || !rank || !name || !phone || !password) { msg.innerHTML = `<div class="msg error">請完整填寫必填欄位</div>`; return; }
   if (password.length < 6) { msg.innerHTML = `<div class="msg error">密碼至少需要 6 碼</div>`; return; }
@@ -486,7 +508,7 @@ async function doApplicantRegister() {
     currentUser = cred.user;
     const newProfile = {
       email, fsr_role: "applicant", fsr_unitName: unitName,
-      unitCode: code, contactRank: rank, contactName: name, contactPhone: phone, createdAt: serverTimestamp(),
+      unitCode: code, contactRank: rank, contactName: name, contactPhone: phone, contactLineId: lineId, createdAt: serverTimestamp(),
     };
     await setDoc(doc(db, COL_APPLICANT_PROFILES, cred.user.uid), newProfile);
     // 單位目錄只在第一次建立時寫入：規則只允許 create、不允許申請單位自己
@@ -1120,6 +1142,13 @@ async function renderAccountsView() {
   c.innerHTML = `<div class="empty">載入中…</div>`;
 
   try {
+    const contactSnap = await getDoc(doc(db, COL_CONTACT, "main"));
+    forgotPasswordContact = contactSnap.exists() ? contactSnap.data() : {};
+  } catch (e) {
+    forgotPasswordContact = {};
+  }
+
+  try {
     const psnap = await getDocs(collection(db, "users"));
     allPersonnel = psnap.docs
       .map(d => ({ id: d.id, ...d.data() }))
@@ -1197,7 +1226,17 @@ function drawAccountsList() {
 
   c.innerHTML = `
     <button class="icon-btn" id="backFromAccounts" aria-label="返回" style="margin-bottom:14px">${ICON_BACK}</button>
-    <div class="section-lbl">設定內部人員角色</div>
+    <div class="section-lbl">外部單位忘記密碼聯絡窗口</div>
+    <div class="card">
+      <div id="contactMsg"></div>
+      <p style="font-size:11px;color:var(--muted);margin:0 0 10px">申請單位在登入頁點「忘記密碼」時，會看到這裡填寫的級職／姓名／電話，請對方直接聯絡處理。</p>
+      <div class="field"><label>級職</label><input id="contactRank" value="${escapeHtml(forgotPasswordContact.rank || "")}"></div>
+      <div class="field"><label>姓名</label><input id="contactName" value="${escapeHtml(forgotPasswordContact.name || "")}"></div>
+      <div class="field"><label>電話</label><input id="contactPhone" type="tel" value="${escapeHtml(forgotPasswordContact.phone || "")}"></div>
+      <button class="btn btn-primary" id="saveContactBtn">儲存</button>
+    </div>
+
+    <div class="section-lbl" style="margin-top:22px">設定內部人員角色</div>
     <div class="card">
       <div id="setRoleMsg"></div>
       <div class="field"><label>選擇人員</label>
@@ -1222,6 +1261,7 @@ function drawAccountsList() {
     ${applicantListHtml}`;
 
   document.getElementById("backFromAccounts").onclick = backToMoreMenu;
+  document.getElementById("saveContactBtn").onclick = saveForgotPasswordContact;
   document.getElementById("setRoleBtn").onclick = doSetInternalRole;
   internalAccounts.forEach(a => {
     if (a.id !== editingInternalId) {
@@ -1535,6 +1575,18 @@ async function deleteInternalRoleNow(a) {
   try {
     await updateDoc(doc(db, "users", a.id), { fsr_role: "" });
   } catch (e) { alert("刪除失敗：" + e.message); }
+}
+
+async function saveForgotPasswordContact() {
+  const msg = document.getElementById("contactMsg");
+  const rank = document.getElementById("contactRank").value.trim();
+  const name = document.getElementById("contactName").value.trim();
+  const phone = document.getElementById("contactPhone").value.trim();
+  try {
+    await setDoc(doc(db, COL_CONTACT, "main"), { rank, name, phone });
+    forgotPasswordContact = { rank, name, phone };
+    msg.innerHTML = `<div class="msg ok">已儲存</div>`;
+  } catch (e) { msg.innerHTML = `<div class="msg error">儲存失敗：${e.message}</div>`; }
 }
 
 async function saveUnitName(a) {
@@ -2114,6 +2166,7 @@ function renderApplicantProfileView() {
       </div>
       <div class="field"><label>承辦人姓名</label><input id="apfName" value="${escapeHtml(profile.contactName || "")}"></div>
       <div class="field"><label>承辦人手機號碼</label><input id="apfPhone" type="tel" value="${escapeHtml(profile.contactPhone || "")}"></div>
+      <div class="field"><label>承辦人 LINE ID（選填）</label><input id="apfLineId" value="${escapeHtml(profile.contactLineId || "")}"></div>
       <button class="btn btn-primary" id="apfSaveBtn">儲存</button>
     </div>
 
@@ -2132,10 +2185,11 @@ async function saveApplicantProfile() {
   const rank = document.getElementById("apfRank").value.trim();
   const name = document.getElementById("apfName").value.trim();
   const phone = document.getElementById("apfPhone").value.trim();
+  const lineId = document.getElementById("apfLineId").value.trim();
   if (!rank || !name || !phone) { msg.innerHTML = `<div class="msg error">請完整填寫必填欄位</div>`; return; }
   try {
-    await updateDoc(doc(db, COL_APPLICANT_PROFILES, currentUser.uid), { contactRank: rank, contactName: name, contactPhone: phone });
-    profile.contactRank = rank; profile.contactName = name; profile.contactPhone = phone;
+    await updateDoc(doc(db, COL_APPLICANT_PROFILES, currentUser.uid), { contactRank: rank, contactName: name, contactPhone: phone, contactLineId: lineId });
+    profile.contactRank = rank; profile.contactName = name; profile.contactPhone = phone; profile.contactLineId = lineId;
     msg.innerHTML = `<div class="msg ok">已儲存</div>`;
   } catch (e) { msg.innerHTML = `<div class="msg error">儲存失敗：${e.message}</div>`; }
 }
