@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
-<title>前支任務指揮台 - 內部人員專用</title>
+<title>前支任務派遣中心 - 內部人員專用</title>
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Noto+Sans+TC:wght@400;500;700;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root{
@@ -184,7 +184,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-08-01.2";
+const BUILD_VERSION = "2026-08-01.3";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -303,7 +303,7 @@ function renderLogin() {
   $app.innerHTML = `
     <div class="auth-wrap">
       <div class="brand-mark"><span>前</span></div>
-      <h1>前支任務指揮台</h1>
+      <h1>前支任務派遣中心</h1>
       <p class="sub">FORWARD SUPPORT DISPATCH ・ 衛生營內部人員專用</p>
       <div id="authMsg">${gateErrorText ? `<div class="msg error">${gateErrorText}</div>` : ""}</div>
       <button class="btn btn-primary" id="googleLoginBtn">使用 Google 帳號登入</button>
@@ -396,7 +396,7 @@ function renderDispatcherShell() {
   activeSection = "home";
   const isAdmin = profile.fsr_role === "admin";
   $app.innerHTML = `
-    ${topbarHtml("前支任務指揮台", (isAdmin ? "管理者" : "承辦人") + " ・ " + escapeHtml(displayNameOf(profile)))}
+    ${topbarHtml("前支任務派遣中心", (isAdmin ? "管理者" : "承辦人") + " ・ " + escapeHtml(displayNameOf(profile)))}
     <div class="content" id="content"></div>
     <button class="fab" id="fabCreate">+</button>
     <div class="tabbar">
