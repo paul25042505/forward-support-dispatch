@@ -62,6 +62,7 @@
   .card p{font-size:12.5px;color:var(--muted);margin:2px 0}
   .card .time{font-family:'JetBrains Mono';font-size:11.5px;color:var(--text);margin-top:8px;padding-top:8px;border-top:1px solid var(--line)}
   .card .actions{display:flex;gap:8px;margin-top:10px}
+  .muted-note{font-size:12px;color:var(--muted)}
 
   .field{margin-bottom:14px}
   .field label{display:block;font-family:'JetBrains Mono';font-size:10.5px;color:var(--muted);letter-spacing:.06em;margin-bottom:6px}
@@ -194,7 +195,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-08-01.20";
+const BUILD_VERSION = "2026-08-01.21";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -235,6 +236,7 @@ const ICON_ACCOUNTS = `<svg viewBox="0 0 24 24" width="26" height="26" fill="non
 const ICON_TAG_CAT = `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12.6 2.5H4a1.5 1.5 0 0 0-1.5 1.5v8.6c0 .4.16.78.44 1.06l9 9a1.5 1.5 0 0 0 2.12 0l7.6-7.6a1.5 1.5 0 0 0 0-2.12l-9-9a1.5 1.5 0 0 0-1.06-.44Z"/><circle cx="7.5" cy="7.5" r="1.2" fill="currentColor" stroke="none"/></svg>`;
 const ICON_PRESET = `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 2.6 5.6 6.1.7-4.5 4.2 1.2 6-5.4-3-5.4 3 1.2-6-4.5-4.2 6.1-.7Z"/></svg>`;
 const ICON_SHARE = `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4M8 8l4-4 4 4"/><path d="M4 13v6a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6"/></svg>`;
+const ICON_PREVIEW = `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>`;
 
 const STATUS_LABEL = { pending:"待審核", reviewing:"審核中，待收公文", approved:"已核定，等待派遣人員", assigned:"已派遣", filled:"任務完成", rejected:"不核准" };
 const VALID_INTERNAL_ROLES = ["dispatcher", "battalion_hq", "company1", "company2", "admin"];
@@ -259,7 +261,8 @@ let pickedTagId = null;   // 新增／編輯任務表單目前選取的標籤
 let availablePresets = []; // 常用任務名稱快取
 let editingPresetId = null; // 更多頁目前正在編輯的常用任務名稱
 let unsubPresets = null;
-let moreSection = null; // 更多頁目前分類：null（選單）| accounts | tags | presets | share
+let moreSection = null; // 更多頁目前分類：null（選單）| accounts | tags | presets | share | rolepreview
+let previewRoleKey = null; // 角色預覽目前選取的角色
 
 const $app = document.getElementById("app");
 
@@ -1045,6 +1048,7 @@ function renderMoreMenu() {
     cards.push({ key: "accounts", icon: ICON_ACCOUNTS, label: "帳號管理" });
     cards.push({ key: "tags", icon: ICON_TAG_CAT, label: "前支種類標籤" });
     cards.push({ key: "presets", icon: ICON_PRESET, label: "常用任務名稱" });
+    cards.push({ key: "rolepreview", icon: ICON_PREVIEW, label: "角色預覽" });
   }
   cards.push({ key: "share", icon: ICON_SHARE, label: "分享網站" });
   c.innerHTML = `
@@ -1059,6 +1063,7 @@ function renderMoreMenu() {
       else if (moreSection === "tags") drawTagsSection();
       else if (moreSection === "presets") drawPresetsSection();
       else if (moreSection === "share") renderShareSection();
+      else if (moreSection === "rolepreview") renderRolePreviewMenu();
     };
   });
 }
@@ -1068,6 +1073,7 @@ function backToMoreMenu() {
   editingInternalId = null;
   editingPresetId = null;
   moreSection = null;
+  previewRoleKey = null;
   renderMoreMenu();
 }
 
@@ -1343,6 +1349,50 @@ async function shareOrCopyLink(url, title) {
   } catch (e) {
     alert("複製失敗，請手動複製：" + url);
   }
+}
+
+const PREVIEW_ROLE_KEYS = ["dispatcher", "battalion_hq", "company1", "company2"];
+
+function renderRolePreviewMenu() {
+  previewRoleKey = null;
+  const c = document.getElementById("content");
+  c.innerHTML = `
+    <button class="icon-btn" id="backFromRolePreview" aria-label="返回" style="margin-bottom:14px">${ICON_BACK}</button>
+    <div class="section-lbl">角色預覽</div>
+    <div class="more-menu">
+      ${PREVIEW_ROLE_KEYS.map(k => `<div class="more-card" data-rolekey="${k}"><h3>${ROLE_LABEL[k]}</h3></div>`).join("")}
+    </div>`;
+  document.getElementById("backFromRolePreview").onclick = backToMoreMenu;
+  document.querySelectorAll(".more-card").forEach(el => {
+    el.onclick = () => renderRolePreviewDetail(el.dataset.rolekey);
+  });
+}
+
+function renderRolePreviewDetail(roleKey) {
+  previewRoleKey = roleKey;
+  const c = document.getElementById("content");
+  let bodyHtml;
+  if (roleKey === "dispatcher") {
+    const list = allRequests.filter(r => ["pending","reviewing","approved"].includes(r.status));
+    bodyHtml = list.length === 0
+      ? `<div class="empty">目前沒有待處理任務</div>`
+      : list.map(r => taskCardHtml(r, false, false)).join("");
+  } else {
+    const label = unitKeyToLabel(roleKey);
+    const unitRequests = allRequests.filter(r => r.assignedUnit === label);
+    const pending = unitRequests.filter(r => r.status === "assigned");
+    const done = unitRequests.filter(r => r.status === "filled");
+    bodyHtml = `
+      <div class="section-lbl">待填寫</div>
+      ${pending.length === 0 ? `<div class="empty">目前沒有任務</div>` : pending.map(r => taskCardHtml(r, false, false)).join("")}
+      <div class="section-lbl" style="margin-top:18px">已完成</div>
+      ${done.length === 0 ? `<div class="empty">目前沒有任務</div>` : done.map(r => taskCardHtml(r, false, false)).join("")}`;
+  }
+  c.innerHTML = `
+    <button class="icon-btn" id="backFromRolePreviewDetail" aria-label="返回" style="margin-bottom:14px">${ICON_BACK}</button>
+    <div class="section-lbl">角色預覽・${ROLE_LABEL[roleKey]}（唯讀）</div>
+    ${bodyHtml}`;
+  document.getElementById("backFromRolePreviewDetail").onclick = renderRolePreviewMenu;
 }
 
 async function doAddTag(getColor) {
@@ -1887,6 +1937,9 @@ function taskCardHtml(r, withDispatchActions=false, withFillAction=false) {
   }
   if (withFillAction && r.status === "filled") {
     actions = `<div class="actions"><button class="btn btn-small btn-outline" id="editfill-${r.id}">編輯車長／駕駛</button></div>`;
+  }
+  if (!withFillAction && r.status === "assigned") {
+    actions = `<div class="actions"><span class="muted-note">等待派遣人員填寫車長／駕駛</span></div>`;
   }
   return `
     <div class="card" data-taskid="${r.id}">
