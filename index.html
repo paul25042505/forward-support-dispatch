@@ -200,7 +200,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-08-01.40";
+const BUILD_VERSION = "2026-08-01.41";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -1957,17 +1957,6 @@ function renderFillVehicleOptions(presetValue, crossUnit) {
   if (keep && (labels.includes(keep) || keep === "__other__")) vehicleSelect.value = keep;
 }
 
-function personnelInfoHtml(u) {
-  return `<div class="person-info">證照等級｜${escapeHtml(u.emtLevel || "—")}　手機｜${escapeHtml(u.phone || "—")}</div>`;
-}
-
-function updatePersonInfo(selectId, infoId) {
-  const sel = document.getElementById(selectId);
-  const infoEl = document.getElementById(infoId);
-  const person = fillAllPersonnel.find(u => u.id === sel.value);
-  infoEl.innerHTML = person ? personnelInfoHtml(person) : "";
-}
-
 function personnelOptionHtml(u) {
   return `<option value="${u.id}" data-rank="${escapeHtml(u.rank || "")}" data-name="${escapeHtml(u.displayName || "")}">${escapeHtml(u.rank || "")} ${escapeHtml(u.displayName || "")}</option>`;
 }
@@ -2037,11 +2026,9 @@ async function openFillSheet(r, existingDoc, roleKey) {
         </label>
         <div class="field"><label>車長（不含士兵）</label>
           <select id="fillCommanderSelect"></select>
-          <div id="fillCommanderInfo"></div>
         </div>
         <div class="field"><label>駕駛</label>
           <select id="fillDriverSelect"></select>
-          <div id="fillDriverInfo"></div>
         </div>
         <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);margin-bottom:10px">
           <input type="checkbox" id="fillVehicleCrossUnitToggle" ${needsCrossUnitVehicle ? "checked" : ""}>跨單位選車（顯示所有單位車輛）
@@ -2061,11 +2048,6 @@ async function openFillSheet(r, existingDoc, roleKey) {
   renderFillPersonnelOptions(cmdMatch ? cmdMatch.id : "", drvMatch ? drvMatch.id : "", needsCrossUnit);
   renderFillVehicleOptions(initialVehicleValue, needsCrossUnitVehicle);
 
-  document.getElementById("fillCommanderSelect").onchange = () => updatePersonInfo("fillCommanderSelect", "fillCommanderInfo");
-  document.getElementById("fillDriverSelect").onchange = () => updatePersonInfo("fillDriverSelect", "fillDriverInfo");
-  updatePersonInfo("fillCommanderSelect", "fillCommanderInfo");
-  updatePersonInfo("fillDriverSelect", "fillDriverInfo");
-
   const vehicleSelect = document.getElementById("fillVehicleSelect");
   const vehicleManual = document.getElementById("fillVehicleManual");
   if (initialVehicleValue === "__other__") {
@@ -2081,8 +2063,6 @@ async function openFillSheet(r, existingDoc, roleKey) {
 
   document.getElementById("fillCrossUnitToggle").onchange = (e) => {
     renderFillPersonnelOptions(undefined, undefined, e.target.checked);
-    updatePersonInfo("fillCommanderSelect", "fillCommanderInfo");
-    updatePersonInfo("fillDriverSelect", "fillDriverInfo");
   };
   overlay.addEventListener("click", (e) => { if (e.target === overlay) closeFillSheet(); });
   document.getElementById("fillCancelBtn").onclick = closeFillSheet;
@@ -2113,12 +2093,27 @@ async function doFillConfirm() {
   const vehicleNumber = vehicleSelect.value === "__other__" ? vehicleManual.value.trim() : vehicleSelect.value;
   const commanderRank = commanderOpt.dataset.rank, commanderName = commanderOpt.dataset.name;
   const driverRank = driverOpt.dataset.rank, driverName = driverOpt.dataset.name;
+  const commanderPerson = fillAllPersonnel.find(u => u.id === commanderSel.value);
+  const driverPerson = fillAllPersonnel.find(u => u.id === driverSel.value);
+  // 車長／駕駛的證照等級跟手機額外複製一份到任務文件上（不只存在
+  // forward_support_assignments），這樣任何看得到這筆任務卡片的人（包含
+  // 申請單位自己）才能直接在卡片上看到聯絡方式，不用另外查詢。
+  const contactFields = {
+    commanderRank, commanderName,
+    commanderPhone: (commanderPerson && commanderPerson.phone) || "",
+    commanderEmtLevel: (commanderPerson && commanderPerson.emtLevel) || "",
+    driverRank, driverName,
+    driverPhone: (driverPerson && driverPerson.phone) || "",
+    driverEmtLevel: (driverPerson && driverPerson.emtLevel) || "",
+    vehicleNumber,
+  };
   try {
     if (fillTargetDocId) {
       await updateDoc(doc(db, COL_ASSIGNMENTS, fillTargetDocId), {
         vehicleCommanderRank: commanderRank, vehicleCommanderName: commanderName,
         driverRank, driverName, vehicleNumber,
       });
+      await updateDoc(doc(db, COL_REQUESTS, r.id), contactFields);
     } else {
       await addDoc(collection(db, COL_ASSIGNMENTS), {
         requestId: r.id, unit: unitKeyToLabel(fillTargetRoleKey),
@@ -2126,7 +2121,7 @@ async function doFillConfirm() {
         driverRank, driverName, vehicleNumber,
         filledBy: currentUser.uid, filledAt: serverTimestamp(),
       });
-      await updateDoc(doc(db, COL_REQUESTS, r.id), { status: "filled" });
+      await updateDoc(doc(db, COL_REQUESTS, r.id), { status: "filled", ...contactFields });
     }
     const refreshRoleKey = (activeSection === "more" && moreSection === "rolepreview") ? fillTargetRoleKey : null;
     closeFillSheet();
@@ -2350,6 +2345,12 @@ function taskCardHtml(r, withDispatchActions=false, withFillAction=false) {
       ${(r.applicantRank || r.applicantName) ? `<p>申請人｜${escapeHtml(r.applicantRank || "")} ${escapeHtml(r.applicantName || "")}</p>` : ""}
       ${r.remarks ? `<p>備註｜${escapeHtml(r.remarks)}</p>` : ""}
       <div class="time">${start} — ${end}</div>
+      ${r.status === "filled" && r.commanderName ? `
+      <div class="person-info">
+        車長｜${escapeHtml(r.commanderRank || "")} ${escapeHtml(r.commanderName)}（證照｜${escapeHtml(r.commanderEmtLevel || "—")}　手機｜${escapeHtml(r.commanderPhone || "—")}）<br>
+        駕駛｜${escapeHtml(r.driverRank || "")} ${escapeHtml(r.driverName || "")}（證照｜${escapeHtml(r.driverEmtLevel || "—")}　手機｜${escapeHtml(r.driverPhone || "—")}）
+        ${r.vehicleNumber ? `<br>車號｜${escapeHtml(r.vehicleNumber)}` : ""}
+      </div>` : ""}
       ${actions}
     </div>`;
 }
