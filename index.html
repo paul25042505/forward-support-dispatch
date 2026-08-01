@@ -195,7 +195,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-08-01.22";
+const BUILD_VERSION = "2026-08-01.23";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -1373,8 +1373,10 @@ function renderRolePreviewMenu() {
 function renderRolePreviewDetail(roleKey) {
   previewRoleKey = roleKey;
   const c = document.getElementById("content");
+  const isUnitRole = roleKey !== "dispatcher";
   let bodyHtml;
-  if (roleKey === "dispatcher") {
+  let pending = [], done = [];
+  if (!isUnitRole) {
     const list = allRequests.filter(r => ["pending","reviewing","approved"].includes(r.status));
     bodyHtml = list.length === 0
       ? `<div class="empty">目前沒有待處理任務</div>`
@@ -1382,19 +1384,27 @@ function renderRolePreviewDetail(roleKey) {
   } else {
     const label = unitKeyToLabel(roleKey);
     const unitRequests = allRequests.filter(r => r.assignedUnit === label);
-    const pending = unitRequests.filter(r => r.status === "assigned");
-    const done = unitRequests.filter(r => r.status === "filled");
+    pending = unitRequests.filter(r => r.status === "assigned");
+    done = unitRequests.filter(r => r.status === "filled");
     bodyHtml = `
       <div class="section-lbl">待填寫</div>
-      ${pending.length === 0 ? `<div class="empty">目前沒有任務</div>` : pending.map(r => taskCardHtml(r, false, false)).join("")}
+      ${pending.length === 0 ? `<div class="empty">目前沒有任務</div>` : pending.map(r => taskCardHtml(r, false, true)).join("")}
       <div class="section-lbl" style="margin-top:18px">已完成</div>
-      ${done.length === 0 ? `<div class="empty">目前沒有任務</div>` : done.map(r => taskCardHtml(r, false, false)).join("")}`;
+      ${done.length === 0 ? `<div class="empty">目前沒有任務</div>` : done.map(r => taskCardHtml(r, false, true)).join("")}`;
   }
   c.innerHTML = `
     <button class="icon-btn" id="backFromRolePreviewDetail" aria-label="返回" style="margin-bottom:14px">${ICON_BACK}</button>
-    <div class="section-lbl">角色預覽・${ROLE_LABEL[roleKey]}（唯讀）</div>
+    <div class="section-lbl">角色預覽・${ROLE_LABEL[roleKey]}${isUnitRole ? "（可代為填寫）" : "（唯讀）"}</div>
     ${bodyHtml}`;
   document.getElementById("backFromRolePreviewDetail").onclick = renderRolePreviewMenu;
+  if (isUnitRole) {
+    [...pending, ...done].forEach(r => {
+      const fillBtn = document.getElementById(`fill-${r.id}`);
+      if (fillBtn) fillBtn.onclick = () => openFillForm(r, roleKey);
+      const editFillBtn = document.getElementById(`editfill-${r.id}`);
+      if (editFillBtn) editFillBtn.onclick = () => openEditFillForm(r, roleKey);
+    });
+  }
 }
 
 async function doAddTag(getColor) {
@@ -1767,29 +1777,31 @@ function renderUnitContent() {
   });
 }
 
-async function openFillForm(r) {
-  await openFillSheet(r, null);
+async function openFillForm(r, roleKey = profile.fsr_role) {
+  await openFillSheet(r, null, roleKey);
 }
 
-async function openEditFillForm(r) {
+async function openEditFillForm(r, roleKey = profile.fsr_role) {
   let aDoc;
   try {
     const snap = await getDocs(query(collection(db, COL_ASSIGNMENTS), where("requestId", "==", r.id)));
     if (snap.empty) { alert("找不到填寫紀錄"); return; }
     aDoc = snap.docs[0];
   } catch (e) { alert("讀取失敗：" + e.message); return; }
-  await openFillSheet(r, aDoc);
+  await openFillSheet(r, aDoc, roleKey);
 }
 
 let fillTargetTask = null;
 let fillTargetDocId = null;
+let fillTargetRoleKey = null;
 
-async function openFillSheet(r, existingDoc) {
+async function openFillSheet(r, existingDoc, roleKey) {
   fillTargetTask = r;
   fillTargetDocId = existingDoc ? existingDoc.id : null;
+  fillTargetRoleKey = roleKey;
   const a = existingDoc ? existingDoc.data() : {};
 
-  const realUnit = FSR_UNIT_TO_REAL_UNIT[profile.fsr_role];
+  const realUnit = FSR_UNIT_TO_REAL_UNIT[roleKey];
   let personnel = [];
   try {
     const snap = await getDocs(query(collection(db, "users"), where("unit", "==", realUnit)));
@@ -1844,6 +1856,7 @@ function closeFillSheet() {
   if (overlay) overlay.remove();
   fillTargetTask = null;
   fillTargetDocId = null;
+  fillTargetRoleKey = null;
 }
 
 async function doFillConfirm() {
@@ -1865,14 +1878,16 @@ async function doFillConfirm() {
       });
     } else {
       await addDoc(collection(db, COL_ASSIGNMENTS), {
-        requestId: r.id, unit: unitKeyToLabel(profile.fsr_role),
+        requestId: r.id, unit: unitKeyToLabel(fillTargetRoleKey),
         vehicleCommanderRank: commanderRank, vehicleCommanderName: commanderName,
         driverRank, driverName, vehicleNumber,
         filledBy: currentUser.uid, filledAt: serverTimestamp(),
       });
       await updateDoc(doc(db, COL_REQUESTS, r.id), { status: "filled" });
     }
+    const refreshRoleKey = (activeSection === "more" && moreSection === "rolepreview") ? fillTargetRoleKey : null;
     closeFillSheet();
+    if (refreshRoleKey) renderRolePreviewDetail(refreshRoleKey);
   } catch (e) { alert("送出失敗：" + e.message); }
 }
 
