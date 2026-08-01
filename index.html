@@ -180,7 +180,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-07-31.35";
+const BUILD_VERSION = "2026-07-31.36";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -629,6 +629,7 @@ function renderDispatcherCreateView() {
   c.innerHTML = `
     <button class="icon-btn" id="backFromCreate" aria-label="返回" style="margin-bottom:14px">${ICON_BACK}</button>
     <div id="createMsg"></div>
+    <div class="field"><label>任務名稱</label><input id="cTaskName" placeholder="例：成功嶺鑑測站"></div>
     <div class="field"><label>申請單位</label><input id="cUnit" placeholder="例：台中市消防局大甲分隊"></div>
     <div class="row2">
       <div class="field"><label>申請人級職（選填）</label><input id="cRank" placeholder="例：分隊長"></div>
@@ -655,6 +656,7 @@ function renderDispatcherCreateView() {
 
 async function doDispatcherCreate() {
   const msg = document.getElementById("createMsg");
+  const taskName = document.getElementById("cTaskName").value.trim();
   const unit = document.getElementById("cUnit").value.trim();
   const rank = document.getElementById("cRank").value.trim();
   const name = document.getElementById("cName").value.trim();
@@ -663,13 +665,14 @@ async function doDispatcherCreate() {
   const end = document.getElementById("cEnd").value;
   const remarks = document.getElementById("cRemarks").value.trim();
   const assign = document.getElementById("cAssign").value;
-  if (!unit || !loc || !start || !end) {
+  if (!taskName || !unit || !loc || !start || !end) {
     msg.innerHTML = `<div class="msg error">請完整填寫必填欄位</div>`; return;
   }
   try {
     const startTs = new Date(start);
     const endTs = new Date(end);
     await addDoc(collection(db, COL_REQUESTS), {
+      taskName,
       applicantUnit: unit, applicantRank: rank, applicantName: name,
       location: loc,
       taskStartTime: startTs,
@@ -685,7 +688,7 @@ async function doDispatcherCreate() {
       reviewedAt: assign ? serverTimestamp() : null,
     });
     msg.innerHTML = `<div class="msg ok">任務已建立</div>`;
-    ["cUnit","cRank","cName","cLoc","cStart","cEnd","cRemarks"].forEach(id => document.getElementById(id).value = "");
+    ["cTaskName","cUnit","cRank","cName","cLoc","cStart","cEnd","cRemarks"].forEach(id => document.getElementById(id).value = "");
     document.getElementById("cAssign").value = "";
     pickedTagId = null;
     document.querySelectorAll("#cTagPicker .tag-pick-chip").forEach(c => c.classList.remove("selected"));
@@ -708,6 +711,7 @@ function renderEditTaskView(r) {
   c.innerHTML = `
     <button class="icon-btn" id="backFromEdit" aria-label="返回" style="margin-bottom:14px">${ICON_BACK}</button>
     <div id="editMsg"></div>
+    <div class="field"><label>任務名稱</label><input id="eTaskName" value="${escapeHtml(r.taskName || "")}"></div>
     <div class="field"><label>申請單位</label><input id="eUnit" value="${escapeHtml(r.applicantUnit || "")}"></div>
     <div class="row2">
       <div class="field"><label>申請人級職（選填）</label><input id="eRank" value="${escapeHtml(r.applicantRank || "")}"></div>
@@ -726,6 +730,7 @@ function renderEditTaskView(r) {
 
 async function doSaveEdit(taskId) {
   const msg = document.getElementById("editMsg");
+  const taskName = document.getElementById("eTaskName").value.trim();
   const unit = document.getElementById("eUnit").value.trim();
   const rank = document.getElementById("eRank").value.trim();
   const name = document.getElementById("eName").value.trim();
@@ -733,11 +738,12 @@ async function doSaveEdit(taskId) {
   const start = document.getElementById("eStart").value;
   const end = document.getElementById("eEnd").value;
   const remarks = document.getElementById("eRemarks").value.trim();
-  if (!unit || !loc || !start || !end) {
+  if (!taskName || !unit || !loc || !start || !end) {
     msg.innerHTML = `<div class="msg error">請完整填寫必填欄位</div>`; return;
   }
   try {
     await updateDoc(doc(db, COL_REQUESTS, taskId), {
+      taskName,
       applicantUnit: unit, applicantRank: rank, applicantName: name,
       location: loc,
       taskStartTime: new Date(start),
@@ -1064,7 +1070,7 @@ function openTaskActionSheet(taskId) {
   overlay.id = "sheetOverlay";
   overlay.innerHTML = `
     <div class="sheet">
-      <div class="sheet-title">${escapeHtml(r.location || "")}</div>
+      <div class="sheet-title">${escapeHtml(r.taskName || r.location || "")}</div>
       <button class="sheet-item" id="sheetEdit">編輯</button>
       <button class="sheet-item" id="sheetCopy">複製到其他日期</button>
       ${canDelete ? `<button class="sheet-item danger" id="sheetDelete">刪除</button>` : ""}
@@ -1092,7 +1098,7 @@ function openEditTask(r) {
 }
 
 async function confirmDeleteTask(r) {
-  if (!confirm(`確定要刪除「${r.location || ""}」這筆任務嗎？此動作無法復原。`)) return;
+  if (!confirm(`確定要刪除「${r.taskName || r.location || ""}」這筆任務嗎？此動作無法復原。`)) return;
   try {
     await deleteDoc(doc(db, COL_REQUESTS, r.id));
   } catch (e) { alert("刪除失敗：" + e.message); }
@@ -1139,7 +1145,7 @@ function renderCopyModal() {
   }
   overlay.innerHTML = `
     <div class="sheet copy-modal">
-      <div class="sheet-title">複製「${escapeHtml(copySourceTask.location || "")}」到其他日期</div>
+      <div class="sheet-title">複製「${escapeHtml(copySourceTask.taskName || copySourceTask.location || "")}」到其他日期</div>
       <div style="padding:14px 20px 0">
         <div class="cal-header">
           <button class="cal-nav" id="copyCalPrev">‹</button>
@@ -1182,6 +1188,7 @@ async function doCopyToDates() {
       const newStart = new Date(yy, mm - 1, dd, startBase.getHours(), startBase.getMinutes());
       const newEnd = new Date(newStart.getTime() + durationMs);
       await addDoc(collection(db, COL_REQUESTS), {
+        taskName: src.taskName || "",
         applicantUnit: src.applicantUnit || "", applicantRank: src.applicantRank || "", applicantName: src.applicantName || "",
         location: src.location || "",
         taskStartTime: newStart, taskEndTime: newEnd,
@@ -1291,7 +1298,8 @@ function taskCardHtml(r, withDispatchActions=false, withFillAction=false) {
         <span class="tag ${tagClass}">${STATUS_LABEL[r.status] || r.status}${r.assignedUnit ? "・" + r.assignedUnit : ""}</span>
       </div>
       ${r.tagName ? `<div class="tag-chip" style="--tag-color:${escapeHtml(r.tagColor || "")}">${escapeHtml(r.tagName)}</div>` : ""}
-      <h3>${escapeHtml(r.location || "")}</h3>
+      <h3>${escapeHtml(r.taskName || r.location || "")}</h3>
+      ${r.taskName && r.location ? `<p>地點｜${escapeHtml(r.location)}</p>` : ""}
       <p>申請單位｜${escapeHtml(r.applicantUnit || "")}</p>
       ${(r.applicantRank || r.applicantName) ? `<p>申請人｜${escapeHtml(r.applicantRank || "")} ${escapeHtml(r.applicantName || "")}</p>` : ""}
       ${r.remarks ? `<p>備註｜${escapeHtml(r.remarks)}</p>` : ""}
