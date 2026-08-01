@@ -205,7 +205,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-08-01.43";
+const BUILD_VERSION = "2026-08-01.44";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -1702,7 +1702,7 @@ async function rejectRequest(r) {
 function bindCardMenu(containerEl) {
   if (!containerEl) return;
   containerEl.onclick = (e) => {
-    if (e.target.closest("button")) return;
+    if (e.target.closest("button") || e.target.closest("a")) return;
     const card = e.target.closest(".card[data-taskid]");
     if (!card) return;
     openTaskActionSheet(card.dataset.taskid);
@@ -2300,6 +2300,12 @@ function watchRequestsForApplicant() {
   });
 }
 
+function phoneLinkHtml(phone) {
+  if (!phone) return "—";
+  const tel = phone.replace(/[^0-9+]/g, "");
+  return `<a href="tel:${tel}" style="color:var(--accent);text-decoration:underline">${escapeHtml(phone)}</a>`;
+}
+
 // ==============================================================
 // 共用卡片渲染
 // ==============================================================
@@ -2352,8 +2358,8 @@ function taskCardHtml(r, withDispatchActions=false, withFillAction=false) {
       <div class="time">${start} — ${end}</div>
       ${r.status === "filled" && r.commanderName ? `
       <div class="person-info">
-        <div class="row"><span class="lbl">車長</span><span class="val">${escapeHtml(r.commanderRank || "")} ${escapeHtml(r.commanderName)}<span class="sub">證照 ${escapeHtml(r.commanderEmtLevel || "—")}　手機 ${escapeHtml(r.commanderPhone || "—")}</span></span></div>
-        <div class="row"><span class="lbl">駕駛</span><span class="val">${escapeHtml(r.driverRank || "")} ${escapeHtml(r.driverName || "")}<span class="sub">證照 ${escapeHtml(r.driverEmtLevel || "—")}　手機 ${escapeHtml(r.driverPhone || "—")}</span></span></div>
+        <div class="row"><span class="lbl">車長</span><span class="val">${escapeHtml(r.commanderRank || "")} ${escapeHtml(r.commanderName)}<span class="sub">證照 ${escapeHtml(r.commanderEmtLevel || "—")}　手機 ${phoneLinkHtml(r.commanderPhone)}</span></span></div>
+        <div class="row"><span class="lbl">駕駛</span><span class="val">${escapeHtml(r.driverRank || "")} ${escapeHtml(r.driverName || "")}<span class="sub">證照 ${escapeHtml(r.driverEmtLevel || "—")}　手機 ${phoneLinkHtml(r.driverPhone)}</span></span></div>
         ${r.vehicleNumber ? `<div class="row"><span class="lbl">車號</span><span class="val">${escapeHtml(r.vehicleNumber)}</span></div>` : ""}
       </div>` : ""}
       ${actions}
