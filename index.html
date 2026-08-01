@@ -192,7 +192,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-08-01.14";
+const BUILD_VERSION = "2026-08-01.15";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -994,6 +994,15 @@ let internalAccounts = [];
 let unsubAccounts = null;
 let unsubInternalAccounts = null;
 let allPersonnel = []; // 衛生營系統全部人員快取，供指派前支角色時用級職姓名挑選
+const RANK_WEIGHT = {
+  "上將":1, "一級上將":1, "二級上將":1, "中將":2, "少將":3,
+  "上校":4, "中校":5, "少校":6,
+  "上尉":7, "中尉":8, "少尉":9,
+  "一等士官長":10, "二等士官長":11, "三等士官長":12, "士官長":12,
+  "上士":13, "中士":14, "下士":15,
+  "上等兵":16, "一等兵":17, "二等兵":18,
+};
+function rankWeight(rank) { return RANK_WEIGHT[rank] ?? 999; }
 const ROLE_LABEL = { dispatcher:"承辦人", battalion_hq:"營部", company1:"一連", company2:"二連", admin:"管理者" };
 
 function renderMoreView() {
@@ -1047,7 +1056,7 @@ async function renderAccountsView() {
     allPersonnel = psnap.docs
       .map(d => ({ id: d.id, ...d.data() }))
       .filter(u => u.role !== "unclaimed")
-      .sort((a, b) => (a.displayName || "").localeCompare(b.displayName || "", "zh-Hant"));
+      .sort((a, b) => rankWeight(a.rank) - rankWeight(b.rank) || (a.displayName || "").localeCompare(b.displayName || "", "zh-Hant"));
   } catch (e) {
     allPersonnel = [];
   }
@@ -1121,7 +1130,7 @@ function drawAccountsList() {
       <div class="field"><label>選擇人員</label>
         <select id="setRoleUid">
           <option value="">請選擇人員</option>
-          ${allPersonnel.map(u => `<option value="${u.id}">${escapeHtml(u.rank ? u.rank + " " : "")}${escapeHtml(u.displayName || u.email || u.id)}${u.email ? "｜" + escapeHtml(u.email) : ""}</option>`).join("")}
+          ${allPersonnel.map(u => `<option value="${u.id}">${escapeHtml(u.rank ? u.rank + " " : "")}${escapeHtml(u.displayName || u.email || u.id)}</option>`).join("")}
         </select>
       </div>
       <div class="field"><label>角色</label>
