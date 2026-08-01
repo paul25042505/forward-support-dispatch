@@ -179,7 +179,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getAuth, onAuthStateChanged, signInWithPopup, signInWithRedirect, getRedirectResult,
-  GoogleAuthProvider, signOut, sendPasswordResetEmail,
+  GoogleAuthProvider, signOut,
   createUserWithEmailAndPassword, signInWithEmailAndPassword
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
@@ -199,7 +199,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-08-01.33";
+const BUILD_VERSION = "2026-08-01.34";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -270,6 +270,7 @@ let applicantSection = "submit"; // submit | mine（申請人站目前分頁）
 let availableTags = [];   // 前支種類標籤快取
 let editingTagId = null;  // 更多頁目前正在編輯（展開顏色選取）的標籤
 let editingInternalId = null; // 更多頁目前正在編輯角色的內部人員 uid
+let editingApplicantId = null; // 更多頁目前正在編輯單位名稱的申請單位帳號 uid
 let unsubTags = null;
 let pickedTagId = null;   // 新增／編輯任務表單目前選取的標籤
 let availablePresets = []; // 常用任務名稱快取
@@ -1105,6 +1106,7 @@ function renderMoreMenu() {
 function backToMoreMenu() {
   editingTagId = null;
   editingInternalId = null;
+  editingApplicantId = null;
   editingPresetId = null;
   moreSection = null;
   previewRoleKey = null;
@@ -1174,14 +1176,22 @@ function drawAccountsList() {
 
   const applicantListHtml = applicantAccounts.length === 0
     ? `<div class="empty">目前還沒有申請單位帳號</div>`
-    : applicantAccounts.map(a => `
+    : applicantAccounts.map(a => a.id === editingApplicantId ? `
       <div class="card">
-        <h3>${escapeHtml(a.fsr_unitName || "（未設定單位名稱）")}</h3>
-        <p>Email｜${escapeHtml(a.email || "")}</p>
-        <div class="field" style="margin-top:10px"><label>單位名稱</label><input id="unitname-${a.id}" value="${escapeHtml(a.fsr_unitName || "")}"></div>
+        <p style="margin:0 0 10px">Email｜${escapeHtml(a.email || "")}</p>
+        <div class="field"><label>單位名稱</label><input id="unitname-${a.id}" value="${escapeHtml(a.fsr_unitName || "")}"></div>
         <div class="actions">
-          <button class="btn btn-small btn-blue" id="saveunit-${a.id}">儲存單位名稱</button>
-          <button class="btn btn-small btn-outline" id="resetpw-${a.id}">寄送重設密碼信</button>
+          <button class="btn btn-small btn-blue" id="saveunit-${a.id}">儲存</button>
+          <button class="btn btn-small btn-outline" id="canceleditunit-${a.id}">取消</button>
+        </div>
+      </div>` : `
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+          <div style="min-width:0">
+            <h3 style="margin:0 0 3px">${escapeHtml(a.fsr_unitName || "（未設定單位名稱）")}</h3>
+            <p style="margin:0">Email｜${escapeHtml(a.email || "")}</p>
+          </div>
+          <button class="icon-btn" id="editunit-${a.id}" aria-label="編輯單位名稱" style="flex-shrink:0">${ICON_EDIT}</button>
         </div>
       </div>`).join("");
 
@@ -1226,8 +1236,16 @@ function drawAccountsList() {
     document.getElementById(`delinternal-${a.id}`).onclick = () => deleteInternalRoleNow(a);
   });
   applicantAccounts.forEach(a => {
-    document.getElementById(`saveunit-${a.id}`).onclick = () => saveUnitName(a);
-    document.getElementById(`resetpw-${a.id}`).onclick = () => sendResetPassword(a);
+    if (a.id !== editingApplicantId) {
+      document.getElementById(`editunit-${a.id}`).onclick = () => { editingApplicantId = a.id; drawAccountsList(); };
+      return;
+    }
+    document.getElementById(`saveunit-${a.id}`).onclick = async () => {
+      await saveUnitName(a);
+      editingApplicantId = null;
+      drawAccountsList();
+    };
+    document.getElementById(`canceleditunit-${a.id}`).onclick = () => { editingApplicantId = null; drawAccountsList(); };
   });
 }
 
@@ -1526,15 +1544,6 @@ async function saveUnitName(a) {
     await updateDoc(doc(db, COL_APPLICANT_PROFILES, a.id), { fsr_unitName: val });
     alert("已更新單位名稱");
   } catch (e) { alert("更新失敗：" + e.message); }
-}
-
-async function sendResetPassword(a) {
-  if (!a.email) { alert("這個帳號沒有 email，無法寄送"); return; }
-  if (!confirm(`確定要寄送密碼重設信到 ${a.email} 嗎？`)) return;
-  try {
-    await sendPasswordResetEmail(auth, a.email);
-    alert("已寄送重設密碼信");
-  } catch (e) { alert("寄送失敗：" + e.message); }
 }
 
 async function startReviewRequest(r) {
