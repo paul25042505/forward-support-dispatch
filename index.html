@@ -188,7 +188,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-08-01.5";
+const BUILD_VERSION = "2026-08-01.6";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -227,6 +227,7 @@ const ICON_BACK = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" s
 const UNITS_INTERNAL = ["營部", "一連", "二連"];
 const STATUS_LABEL = { pending:"待審核", assigned:"已分發", filled:"已完成", rejected:"不核准" };
 const VALID_INTERNAL_ROLES = ["dispatcher", "battalion_hq", "company1", "company2", "admin"];
+const RANK_OPTIONS = ["中校","少校","上尉","中尉","少尉","士官長","上士","中士","下士","上等兵","一等兵","二等兵"];
 
 let currentUser = null;   // Firebase Auth user
 let profile = null;       // Firestore users/{uid} 文件內容
@@ -234,7 +235,9 @@ let allRequests = [];     // 目前使用者可見的任務快取
 let unsubRequests = null;
 let activeTab = null;
 let gateErrorText = null; // 登入被擋下時要顯示的錯誤訊息（避免 signOut 觸發的重繪把訊息蓋掉）
-let loginMode = "internal"; // internal | applicantLogin | applicantRegister（登入頁目前顯示哪種登入方式）
+// internal | applicantLogin | applicantRegister（登入頁目前顯示哪種登入方式）
+// 網址帶 ?mode=applicant 可以讓外部單位直接開到申請單位登入頁，不用先點連結切換
+let loginMode = new URLSearchParams(location.search).get("mode") === "applicant" ? "applicantLogin" : "internal";
 let suppressAuthGate = false; // 申請單位註冊流程中，暫停 onAuthStateChanged 的自動導轉，改由註冊流程自己接手
 let applicantSection = "submit"; // submit | mine（申請人站目前分頁）
 let availableTags = [];   // 前支種類標籤快取
@@ -396,9 +399,14 @@ function renderApplicantRegisterView() {
       <h1>前支任務派遣中心</h1>
       <p class="sub">外部申請單位・註冊</p>
       <div id="authMsg">${gateErrorText ? `<div class="msg error">${gateErrorText}</div>` : ""}</div>
-      <div class="field"><label>單位代碼</label><input id="arCode" placeholder="例：A123"></div>
-      <div class="field"><label>單位全銜</label><input id="arUnitName" placeholder="例：台中市消防局大甲分隊"></div>
-      <div class="field"><label>承辦人級職（選填）</label><input id="arRank" placeholder="例：分隊長"></div>
+      <div class="field"><label>單位代碼</label><input id="arCode" placeholder="例：38724"></div>
+      <div class="field"><label>單位全銜</label><input id="arUnitName" placeholder="例：陸軍第五地區支援指揮部衛生營"></div>
+      <div class="field"><label>承辦人級職（選填）</label>
+        <select id="arRank">
+          <option value="">請選擇級職</option>
+          ${RANK_OPTIONS.map(r => `<option value="${r}">${r}</option>`).join("")}
+        </select>
+      </div>
       <div class="field"><label>承辦人姓名（選填）</label><input id="arName" placeholder="例：陳○○"></div>
       <div class="field"><label>密碼（至少 6 碼）</label><input id="arPassword" type="password"></div>
       <button class="btn btn-primary" id="arRegisterBtn">註冊</button>
