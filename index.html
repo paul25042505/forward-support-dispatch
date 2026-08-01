@@ -11,17 +11,19 @@
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Noto+Sans+TC:wght@400;500;700;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root{
-    --bg:#f2f4f8; --panel:#ffffff; --panel2:#eef1f7; --line:#dce1eb;
-    --text:#171b26; --muted:#6b7488; --accent:#d9631f; --blue:#2f6fe0;
-    --green:#1f9d5c; --amber:#c98a0e; --red:#d64545; --purple:#8b5cf6; --cyan:#0891b2; --shadow:0 1px 3px rgba(20,25,40,.05);
-    --fab-text:#fff; --app-max-width:480px; --page-bg:var(--bg);
+    --bg:#f4f1e9; --panel:#ffffff; --panel2:#ece8dc; --line:#e5e1d2;
+    --text:#2c2a24; --muted:#8d8a7c; --accent:#3f7d73; --blue:#3d6ba8; --blue-ink:#fff;
+    --green:#5fa88e; --amber:#b3823a; --red:#d2836f; --purple:#7b6ea3; --cyan:#4c8fa0; --shadow:0 10px 24px -12px rgba(60,50,20,.18);
+    --shadow-fab:0 10px 22px -4px rgba(63,125,115,.4);
+    --fab-text:#f3fbf8; --app-max-width:480px; --page-bg:var(--bg);
   }
   @media (prefers-color-scheme: dark){
     :root{
-      --bg:#0c1220; --panel:#131b2e; --panel2:#182238; --line:#26314a;
-      --text:#e7ecf6; --muted:#7e8aa8; --accent:#ff8c42; --blue:#4f8bff;
-      --green:#3ddc84; --amber:#ffcf5c; --red:#ff5a5a; --purple:#a78bfa; --cyan:#22d3ee; --shadow:none;
-      --fab-text:#111;
+      --bg:#1c1b17; --panel:#252420; --panel2:#2c2a24; --line:#3b382f;
+      --text:#ede9dd; --muted:#a39e8c; --accent:#6fb3a4; --blue:#8fb0cc; --blue-ink:#0d2233;
+      --green:#7ec2a4; --amber:#d9b36b; --red:#e0987f; --purple:#a79bc9; --cyan:#6faab8; --shadow:none;
+      --shadow-fab:0 10px 22px -4px rgba(0,0,0,.45);
+      --fab-text:#14201c;
     }
   }
   @media (min-width:768px){ :root{ --app-max-width:640px; --page-bg:var(--panel2); } }
@@ -47,10 +49,10 @@
 
   .content{flex:1;min-width:0;padding:16px 20px calc(140px + env(safe-area-inset-bottom));overflow-y:auto}
 
-  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:12px;box-shadow:var(--shadow)}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:14px 16px;margin-bottom:12px;box-shadow:var(--shadow)}
   .task-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;gap:8px}
   .id{font-family:'JetBrains Mono';font-size:10.5px;color:var(--muted)}
-  .tag{font-family:'JetBrains Mono';font-size:10px;padding:3px 8px;border-radius:3px;display:inline-flex;align-items:center;gap:4px;font-weight:600;white-space:nowrap}
+  .tag{font-family:'JetBrains Mono';font-size:10px;padding:3px 8px;border-radius:8px;display:inline-flex;align-items:center;gap:4px;font-weight:600;white-space:nowrap}
   .tag.pending{background:color-mix(in srgb, var(--amber) 14%, transparent);color:var(--amber)}
   .tag.reviewing{background:color-mix(in srgb, var(--purple) 14%, transparent);color:var(--purple)}
   .tag.approved{background:color-mix(in srgb, var(--cyan) 14%, transparent);color:var(--cyan)}
@@ -66,18 +68,20 @@
 
   .field{margin-bottom:14px}
   .field label{display:block;font-family:'JetBrains Mono';font-size:10.5px;color:var(--muted);letter-spacing:.06em;margin-bottom:6px}
-  .field input, .field select, .field textarea{width:100%;max-width:100%;min-width:0;min-height:44px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:11px 12px;font-size:13.5px;color:var(--text)}
+  .field input, .field select, .field textarea{width:100%;max-width:100%;min-width:0;min-height:44px;background:var(--panel2);border:1px solid var(--line);border-radius:14px;padding:11px 12px;font-size:13.5px;color:var(--text)}
   .field input[type="date"]{-webkit-appearance:none;appearance:none;display:block}
   .field textarea{resize:vertical;min-height:64px}
   .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 
-  .btn{display:block;width:100%;text-align:center;padding:13px;border-radius:10px;font-weight:700;font-size:13.5px;border:none;cursor:pointer}
+  .btn{display:block;width:100%;text-align:center;padding:13px;border-radius:18px;font-weight:700;font-size:13.5px;border:none;cursor:pointer}
   .btn-primary{background:var(--accent);color:var(--fab-text)}
   .btn-outline{background:transparent;border:1px solid var(--line);color:var(--text)}
-  .btn-small{padding:8px 12px;font-size:11.5px;border-radius:8px;flex:1}
+  .btn-small{padding:8px 12px;font-size:11.5px;border-radius:14px;flex:1}
   .btn-green{background:var(--green);color:#06251a}
   .btn-red{background:var(--red);color:#2a0808}
-  .btn-blue{background:var(--blue);color:#fff}
+  .btn-blue{background:var(--blue);color:var(--blue-ink)}
+  .btn-row{display:flex;gap:10px}
+  .btn-row .btn{width:auto;flex:1}
 
   .section-lbl{font-family:'JetBrains Mono';font-size:10px;color:var(--accent);letter-spacing:.15em;margin:18px 0 10px;font-weight:700}
   .empty{text-align:center;color:var(--muted);font-size:12.5px;padding:40px 20px}
@@ -86,19 +90,19 @@
   .msg.ok{background:color-mix(in srgb, var(--green) 14%, transparent);color:var(--green)}
 
   .stats{display:flex;gap:10px;margin-bottom:16px;overflow-x:auto}
-  .stat{flex-shrink:0;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:11px 16px;min-width:78px}
+  .stat{flex-shrink:0;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:11px 16px;min-width:78px;box-shadow:var(--shadow)}
   .stat .n{font-family:'JetBrains Mono';font-size:20px;font-weight:700}
   .stat .l{font-size:10px;color:var(--muted);margin-top:2px}
   .stat.amber .n{color:var(--amber)} .stat.blue .n{color:var(--blue)} .stat.green .n{color:var(--green)}
 
   .status-cards{display:flex;gap:8px;margin-bottom:16px;overflow-x:auto}
-  .status-card{flex:0 0 auto;width:84px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:11px 4px;text-align:center;cursor:pointer}
+  .status-card{flex:0 0 auto;width:84px;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:11px 4px;text-align:center;cursor:pointer;box-shadow:var(--shadow)}
   .status-card .n{font-family:'JetBrains Mono';font-size:19px;font-weight:700}
   .status-card .l{font-size:10px;color:var(--muted);margin-top:2px}
   .status-card.amber .n{color:var(--amber)} .status-card.purple .n{color:var(--purple)} .status-card.cyan .n{color:var(--cyan)} .status-card.blue .n{color:var(--blue)} .status-card.green .n{color:var(--green)} .status-card.gray .n{color:var(--text)}
 
   .more-menu{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-  .more-card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px 14px;text-align:center;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:10px;color:var(--muted);box-shadow:var(--shadow)}
+  .more-card{background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:22px 14px;text-align:center;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:10px;color:var(--muted);box-shadow:var(--shadow)}
   .more-card h3{margin:0;font-size:13.5px;color:var(--text)}
   .status-card.active{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
   .status-card.active .l{color:var(--accent);font-weight:700}
@@ -106,10 +110,10 @@
   /* ---------- 行事曆 ---------- */
   .cal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
   .cal-title{font-family:'Chakra Petch';font-weight:700;font-size:15px}
-  .cal-nav{background:var(--panel2);border:1px solid var(--line);color:var(--text);width:32px;height:32px;border-radius:8px;font-size:16px;cursor:pointer}
+  .cal-nav{background:var(--panel2);border:1px solid var(--line);color:var(--text);width:32px;height:32px;border-radius:50%;font-size:16px;cursor:pointer}
   .cal-weekdays{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));text-align:center;font-size:10.5px;color:var(--muted);margin-bottom:6px;font-family:'JetBrains Mono'}
   .cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));grid-auto-rows:42px;gap:4px;width:100%}
-  .cal-cell{width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:8px;cursor:pointer;background:var(--panel);border:1px solid var(--line);min-width:0}
+  .cal-cell{width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:12px;cursor:pointer;background:var(--panel);border:1px solid var(--line);min-width:0}
   .cal-cell.empty{visibility:hidden;cursor:default}
   .cal-cell .daynum{font-size:12.5px}
   .cal-cell.today{border-color:var(--accent);color:var(--accent);font-weight:700}
@@ -120,12 +124,11 @@
   .tabbar .item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:10px;color:var(--muted);cursor:pointer;background:none;border:none;font-family:inherit}
   .tabbar .item.active{color:var(--accent);font-weight:700}
 
-  .fab{position:fixed;right:20px;bottom:calc(90px + env(safe-area-inset-bottom));width:56px;height:56px;border-radius:50%;background:var(--accent);color:var(--fab-text);border:none;font-size:28px;line-height:1;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(0,0,0,.28);z-index:12;cursor:pointer}
+  .fab{position:fixed;right:20px;bottom:calc(90px + env(safe-area-inset-bottom));width:56px;height:56px;border-radius:50%;background:var(--accent);color:var(--fab-text);border:none;font-size:28px;line-height:1;display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow-fab);z-index:12;cursor:pointer}
   @media (min-width:768px){ .fab{right:calc(50% - (var(--app-max-width) / 2) + 20px)} }
   .viewmode-cards{display:flex;gap:10px;margin:-16px 0 0;padding:16px 0;position:sticky;top:-16px;z-index:5;background:var(--bg)}
-  .viewmode-card{width:76px;height:76px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:14px;cursor:pointer;font-size:12px;font-weight:600;color:var(--muted)}
+  .viewmode-card{width:76px;height:76px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:20px;cursor:pointer;font-size:12px;font-weight:600;color:var(--muted)}
   .viewmode-card.active{background:color-mix(in srgb, var(--accent) 14%, transparent);border-color:var(--accent);color:var(--accent)}
-  .back-link{display:inline-block;font-family:'JetBrains Mono';font-size:10.5px;color:var(--muted);border:1px solid var(--line);background:var(--panel2);padding:6px 12px;border-radius:20px;cursor:pointer;margin-bottom:14px}
 
   /* ---------- 標籤 ---------- */
   .tag-chip{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:600;color:var(--tag-color, var(--muted));margin-bottom:6px}
@@ -140,11 +143,11 @@
   .color-swatches{display:flex;gap:8px;flex-wrap:wrap}
   .color-swatch{width:28px;height:28px;border-radius:50%;cursor:pointer;border:2px solid transparent}
   .color-swatch.selected{border-color:var(--text)}
-  .icon-btn{flex-shrink:0;width:32px;height:32px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);color:var(--muted);display:flex;align-items:center;justify-content:center;cursor:pointer}
+  .icon-btn{flex-shrink:0;width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:var(--panel2);color:var(--muted);display:flex;align-items:center;justify-content:center;cursor:pointer}
 
   /* ---------- 底部彈出選單／彈窗 ---------- */
   .sheet-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:30;display:flex;align-items:flex-end;justify-content:center}
-  .sheet{width:100%;max-width:var(--app-max-width);max-height:88vh;overflow-y:auto;background:var(--panel);border-radius:16px 16px 0 0;padding:6px 0 max(10px, env(safe-area-inset-bottom))}
+  .sheet{width:100%;max-width:var(--app-max-width);max-height:88vh;overflow-y:auto;background:var(--panel);border-radius:24px 24px 0 0;padding:6px 0 max(10px, env(safe-area-inset-bottom))}
   .sheet-title{padding:14px 20px 10px;font-size:12.5px;color:var(--muted);border-bottom:1px solid var(--line)}
   .sheet-item{display:block;width:100%;text-align:center;padding:16px;font-size:15px;color:var(--text);background:none;border:none;border-bottom:1px solid var(--line);cursor:pointer;font-family:inherit}
   .sheet-item.danger{color:var(--red)}
@@ -153,7 +156,7 @@
 
   /* ---------- 登入畫面 ---------- */
   .auth-wrap{flex:1;display:flex;flex-direction:column;justify-content:center;padding:32px 28px}
-  .auth-wrap .brand-mark{width:44px;height:44px;border:2px solid var(--accent);border-radius:6px;display:flex;align-items:center;justify-content:center;transform:rotate(45deg);margin-bottom:20px}
+  .auth-wrap .brand-mark{width:44px;height:44px;border:2px solid var(--accent);border-radius:10px;display:flex;align-items:center;justify-content:center;transform:rotate(45deg);margin-bottom:20px}
   .auth-wrap .brand-mark span{transform:rotate(-45deg);font-family:'Chakra Petch';font-weight:700;color:var(--accent)}
   .auth-wrap h1{font-family:'Chakra Petch';font-size:22px;margin:0 0 4px;font-weight:700}
   .auth-wrap p.sub{margin:0 0 26px;font-size:12.5px;color:var(--muted)}
@@ -195,7 +198,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-08-01.28";
+const BUILD_VERSION = "2026-08-01.29";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -1543,8 +1546,10 @@ function openAssignPrompt(r) {
             <option value="二連">第二連</option>
           </select>
         </div>
-        <button class="btn btn-primary" id="assignConfirmBtn">確認派遣</button>
-        <button class="back-link" id="assignCancelBtn" style="display:block;text-align:center;margin:10px auto 0">取消</button>
+        <div class="btn-row">
+          <button class="btn btn-outline" id="assignCancelBtn">取消</button>
+          <button class="btn btn-primary" id="assignConfirmBtn">確認派遣</button>
+        </div>
       </div>
     </div>`;
   document.body.appendChild(overlay);
@@ -1689,8 +1694,10 @@ function renderCopyModal() {
         <p style="font-size:11px;color:var(--muted);margin:10px 0 0">點選日期可複選，會保留原任務的時間長度</p>
       </div>
       <div style="padding:16px 20px">
-        <button class="btn btn-primary" id="copyConfirmBtn">複製到已選日期（${copySelectedDates.size}）</button>
-        <button class="back-link" id="copyCancelBtn" style="display:block;text-align:center;margin:10px auto 0">取消</button>
+        <div class="btn-row">
+          <button class="btn btn-outline" id="copyCancelBtn">取消</button>
+          <button class="btn btn-primary" id="copyConfirmBtn">複製到已選日期（${copySelectedDates.size}）</button>
+        </div>
       </div>
     </div>`;
   document.getElementById("copyCalPrev").onclick = () => { copyCalMonth = new Date(y, m-1, 1); renderCopyModal(); };
@@ -1923,8 +1930,10 @@ async function openFillSheet(r, existingDoc, roleKey) {
           <select id="fillVehicleSelect"></select>
           <input type="text" id="fillVehicleManual" placeholder="手動輸入車號" style="margin-top:8px;display:none">
         </div>
-        <button class="btn btn-primary" id="fillConfirmBtn">確認送出</button>
-        <button class="back-link" id="fillCancelBtn" style="display:block;text-align:center;margin:10px auto 0">取消</button>
+        <div class="btn-row">
+          <button class="btn btn-outline" id="fillCancelBtn">取消</button>
+          <button class="btn btn-primary" id="fillConfirmBtn">確認送出</button>
+        </div>
       </div>
     </div>`;
   document.body.appendChild(overlay);
