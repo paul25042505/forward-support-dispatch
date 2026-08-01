@@ -93,6 +93,10 @@
   .status-card .n{font-family:'JetBrains Mono';font-size:19px;font-weight:700}
   .status-card .l{font-size:10px;color:var(--muted);margin-top:2px}
   .status-card.amber .n{color:var(--amber)} .status-card.blue .n{color:var(--blue)} .status-card.green .n{color:var(--green)} .status-card.gray .n{color:var(--text)}
+
+  .more-menu{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .more-card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px 14px;text-align:center;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:10px;color:var(--muted);box-shadow:var(--shadow)}
+  .more-card h3{margin:0;font-size:13.5px;color:var(--text)}
   .status-card.active{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
   .status-card.active .l{color:var(--accent);font-weight:700}
 
@@ -188,7 +192,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-08-01.11";
+const BUILD_VERSION = "2026-08-01.12";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -223,6 +227,10 @@ const ICON_CALENDAR = `<svg viewBox="0 0 24 24" width="22" height="22" fill="non
 const ICON_EDIT = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>`;
 const ICON_LOGOUT = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>`;
 const ICON_BACK = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>`;
+const ICON_ACCOUNTS = `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><circle cx="17.5" cy="9" r="2.3"/><path d="M15.5 13.5a5 5 0 0 1 6 4.8"/></svg>`;
+const ICON_TAG_CAT = `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12.6 2.5H4a1.5 1.5 0 0 0-1.5 1.5v8.6c0 .4.16.78.44 1.06l9 9a1.5 1.5 0 0 0 2.12 0l7.6-7.6a1.5 1.5 0 0 0 0-2.12l-9-9a1.5 1.5 0 0 0-1.06-.44Z"/><circle cx="7.5" cy="7.5" r="1.2" fill="currentColor" stroke="none"/></svg>`;
+const ICON_PRESET = `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 2.6 5.6 6.1.7-4.5 4.2 1.2 6-5.4-3-5.4 3 1.2-6-4.5-4.2 6.1-.7Z"/></svg>`;
+const ICON_SHARE = `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4M8 8l4-4 4 4"/><path d="M4 13v6a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6"/></svg>`;
 
 const UNITS_INTERNAL = ["營部", "一連", "二連"];
 const STATUS_LABEL = { pending:"待審核", assigned:"已分發", filled:"已完成", rejected:"不核准" };
@@ -248,6 +256,7 @@ let pickedTagId = null;   // 新增／編輯任務表單目前選取的標籤
 let availablePresets = []; // 常用任務名稱快取
 let editingPresetId = null; // 更多頁目前正在編輯的常用任務名稱
 let unsubPresets = null;
+let moreSection = null; // 更多頁目前分類：null（選單）| accounts | tags | presets | share
 
 const $app = document.getElementById("app");
 
@@ -512,7 +521,7 @@ function watchTags() {
   const q = query(collection(db, COL_TAGS), orderBy("name"));
   unsubTags = onSnapshot(q, (snap) => {
     availableTags = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    if (activeSection === "more") drawAccountsList();
+    if (activeSection === "more" && moreSection === "tags") drawTagsSection();
   });
 }
 
@@ -521,7 +530,7 @@ function watchPresets() {
   const q = query(collection(db, COL_PRESETS), orderBy("name"));
   unsubPresets = onSnapshot(q, (snap) => {
     availablePresets = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    if (activeSection === "more") drawAccountsList();
+    if (activeSection === "more" && moreSection === "presets") drawPresetsSection();
   });
 }
 
@@ -990,12 +999,42 @@ function renderMoreView() {
   editingTagId = null;
   editingInternalId = null;
   editingPresetId = null;
-  if (profile.fsr_role !== "admin") {
-    const c = document.getElementById("content");
-    c.innerHTML = `<div class="eyebrow">FORWARD SUPPORT ・ build ${BUILD_VERSION}</div><div class="empty">目前沒有其他設定項目</div>`;
-    return;
+  moreSection = null;
+  renderMoreMenu();
+}
+
+function renderMoreMenu() {
+  const c = document.getElementById("content");
+  const isAdmin = profile.fsr_role === "admin";
+  const cards = [];
+  if (isAdmin) {
+    cards.push({ key: "accounts", icon: ICON_ACCOUNTS, label: "帳號管理" });
+    cards.push({ key: "tags", icon: ICON_TAG_CAT, label: "前支種類標籤" });
+    cards.push({ key: "presets", icon: ICON_PRESET, label: "常用任務名稱" });
   }
-  renderAccountsView();
+  cards.push({ key: "share", icon: ICON_SHARE, label: "分享網站" });
+  c.innerHTML = `
+    <div class="eyebrow">FORWARD SUPPORT ・ build ${BUILD_VERSION}</div>
+    <div class="more-menu">
+      ${cards.map(x => `<div class="more-card" data-key="${x.key}">${x.icon}<h3>${x.label}</h3></div>`).join("")}
+    </div>`;
+  document.querySelectorAll(".more-card").forEach(el => {
+    el.onclick = () => {
+      moreSection = el.dataset.key;
+      if (moreSection === "accounts") renderAccountsView();
+      else if (moreSection === "tags") drawTagsSection();
+      else if (moreSection === "presets") drawPresetsSection();
+      else if (moreSection === "share") renderShareSection();
+    };
+  });
+}
+
+function backToMoreMenu() {
+  editingTagId = null;
+  editingInternalId = null;
+  editingPresetId = null;
+  moreSection = null;
+  renderMoreMenu();
 }
 
 function renderAccountsView() {
@@ -1006,7 +1045,7 @@ function renderAccountsView() {
   const q = query(collection(db, "users"), where("fsr_role", "==", "applicant"));
   unsubAccounts = onSnapshot(q, (snap) => {
     applicantAccounts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    if (activeSection === "more") drawAccountsList();
+    if (activeSection === "more" && moreSection === "accounts") drawAccountsList();
   }, (e) => {
     c.innerHTML = `<div class="msg error">讀取失敗：${e.message}（可能是 Firestore 規則還沒開放管理者讀取 users）</div>`;
   });
@@ -1015,7 +1054,7 @@ function renderAccountsView() {
   const q2 = query(collection(db, "users"), where("fsr_role", "in", ["dispatcher","battalion_hq","company1","company2","admin"]));
   unsubInternalAccounts = onSnapshot(q2, (snap) => {
     internalAccounts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    if (activeSection === "more") drawAccountsList();
+    if (activeSection === "more" && moreSection === "accounts") drawAccountsList();
   });
 }
 
@@ -1063,6 +1102,49 @@ function drawAccountsList() {
         </div>
       </div>`).join("");
 
+  c.innerHTML = `
+    <button class="icon-btn" id="backFromAccounts" aria-label="返回" style="margin-bottom:14px">${ICON_BACK}</button>
+    <div class="section-lbl">設定內部人員角色</div>
+    <div class="card">
+      <div id="setRoleMsg"></div>
+      <div class="field"><label>對方的 Email（要跟他登入 Google 用的信箱一致）</label><input id="setRoleEmail" placeholder="you@gmail.com"></div>
+      <div class="field"><label>角色</label>
+        <select id="setRoleSelect">
+          ${Object.entries(ROLE_LABEL).map(([v,l]) => `<option value="${v}">${l}</option>`).join("")}
+        </select>
+      </div>
+      <button class="btn btn-primary" id="setRoleBtn">查詢並設定角色</button>
+      <p style="font-size:11px;color:var(--muted);margin-top:10px">對方必須「已經登入過衛生營系統至少一次」，這個查詢才找得到他的帳號。</p>
+    </div>
+
+    <div class="section-lbl" style="margin-top:22px">已設定的內部人員</div>
+    ${internalListHtml}
+
+    <div class="section-lbl" style="margin-top:22px">申請單位帳號</div>
+    ${applicantListHtml}`;
+
+  document.getElementById("backFromAccounts").onclick = backToMoreMenu;
+  document.getElementById("setRoleBtn").onclick = doSetInternalRole;
+  internalAccounts.forEach(a => {
+    if (a.id !== editingInternalId) {
+      document.getElementById(`editinternal-${a.id}`).onclick = () => { editingInternalId = a.id; drawAccountsList(); };
+      return;
+    }
+    document.getElementById(`saveinternal-${a.id}`).onclick = async () => {
+      await saveInternalRoleNow(a.id, document.getElementById(`internalrole-${a.id}`).value);
+      editingInternalId = null;
+      drawAccountsList();
+    };
+    document.getElementById(`delinternal-${a.id}`).onclick = () => deleteInternalRoleNow(a);
+  });
+  applicantAccounts.forEach(a => {
+    document.getElementById(`saveunit-${a.id}`).onclick = () => saveUnitName(a);
+    document.getElementById(`resetpw-${a.id}`).onclick = () => sendResetPassword(a);
+  });
+}
+
+function drawTagsSection() {
+  const c = document.getElementById("content");
   const tagListHtml = availableTags.length === 0
     ? `<div class="empty">目前還沒有標籤</div>`
     : availableTags.map(t => t.id === editingTagId ? `
@@ -1089,6 +1171,53 @@ function drawAccountsList() {
         </div>
       </div>`).join("");
 
+  c.innerHTML = `
+    <button class="icon-btn" id="backFromTags" aria-label="返回" style="margin-bottom:14px">${ICON_BACK}</button>
+    <div class="section-lbl">前支種類標籤</div>
+    <div class="card">
+      <div id="tagMsg"></div>
+      <div class="field"><label>標籤名稱</label><input id="newTagName" placeholder="例：醫療後送"></div>
+      <div class="field"><label>顏色</label>
+        <div class="color-swatches" id="newTagColorSwatches">
+          ${TAG_COLOR_PALETTE.map((cc,i) => `<div class="color-swatch${i===0?" selected":""}" data-color="${cc}" style="background:${cc}"></div>`).join("")}
+        </div>
+      </div>
+      <button class="btn btn-primary" id="addTagBtn">新增標籤</button>
+    </div>
+    ${tagListHtml}`;
+
+  document.getElementById("backFromTags").onclick = backToMoreMenu;
+  let newTagColor = TAG_COLOR_PALETTE[0];
+  document.querySelectorAll("#newTagColorSwatches .color-swatch").forEach(el => {
+    el.onclick = () => {
+      newTagColor = el.dataset.color;
+      document.querySelectorAll("#newTagColorSwatches .color-swatch").forEach(s => s.classList.toggle("selected", s.dataset.color === newTagColor));
+    };
+  });
+  document.getElementById("addTagBtn").onclick = () => doAddTag(() => newTagColor);
+  availableTags.forEach(t => {
+    if (t.id !== editingTagId) {
+      document.getElementById(`edittag-${t.id}`).onclick = () => { editingTagId = t.id; drawTagsSection(); };
+      return;
+    }
+    let editColor = t.color;
+    document.querySelectorAll(`#tagcolor-${t.id} .color-swatch`).forEach(el => {
+      el.onclick = () => {
+        editColor = el.dataset.color;
+        document.querySelectorAll(`#tagcolor-${t.id} .color-swatch`).forEach(s => s.classList.toggle("selected", s.dataset.color === editColor));
+      };
+    });
+    document.getElementById(`savetag-${t.id}`).onclick = async () => {
+      await saveTagNow(t.id, document.getElementById(`tagname-${t.id}`).value.trim(), () => editColor);
+      editingTagId = null;
+      drawTagsSection();
+    };
+    document.getElementById(`deltag-${t.id}`).onclick = () => deleteTagNow(t.id);
+  });
+}
+
+function drawPresetsSection() {
+  const c = document.getElementById("content");
   const presetListHtml = availablePresets.length === 0
     ? `<div class="empty">目前還沒有常用任務名稱</div>`
     : availablePresets.map(p => p.id === editingPresetId ? `
@@ -1107,40 +1236,8 @@ function drawAccountsList() {
       </div>`).join("");
 
   c.innerHTML = `
-    <div class="eyebrow">FORWARD SUPPORT ・ build ${BUILD_VERSION}</div>
-    <div class="section-lbl">設定內部人員角色</div>
-    <div class="card">
-      <div id="setRoleMsg"></div>
-      <div class="field"><label>對方的 Email（要跟他登入 Google 用的信箱一致）</label><input id="setRoleEmail" placeholder="you@gmail.com"></div>
-      <div class="field"><label>角色</label>
-        <select id="setRoleSelect">
-          ${Object.entries(ROLE_LABEL).map(([v,l]) => `<option value="${v}">${l}</option>`).join("")}
-        </select>
-      </div>
-      <button class="btn btn-primary" id="setRoleBtn">查詢並設定角色</button>
-      <p style="font-size:11px;color:var(--muted);margin-top:10px">對方必須「已經登入過衛生營系統至少一次」，這個查詢才找得到他的帳號。</p>
-    </div>
-
-    <div class="section-lbl" style="margin-top:22px">已設定的內部人員</div>
-    ${internalListHtml}
-
-    <div class="section-lbl" style="margin-top:22px">申請單位帳號</div>
-    ${applicantListHtml}
-
-    <div class="section-lbl" style="margin-top:22px">前支種類標籤</div>
-    <div class="card">
-      <div id="tagMsg"></div>
-      <div class="field"><label>標籤名稱</label><input id="newTagName" placeholder="例：醫療後送"></div>
-      <div class="field"><label>顏色</label>
-        <div class="color-swatches" id="newTagColorSwatches">
-          ${TAG_COLOR_PALETTE.map((cc,i) => `<div class="color-swatch${i===0?" selected":""}" data-color="${cc}" style="background:${cc}"></div>`).join("")}
-        </div>
-      </div>
-      <button class="btn btn-primary" id="addTagBtn">新增標籤</button>
-    </div>
-    ${tagListHtml}
-
-    <div class="section-lbl" style="margin-top:22px">常用任務名稱</div>
+    <button class="icon-btn" id="backFromPresets" aria-label="返回" style="margin-bottom:14px">${ICON_BACK}</button>
+    <div class="section-lbl">常用任務名稱</div>
     <p style="font-size:11px;color:var(--muted);margin:-6px 0 12px">新增任務時可以點選快速帶入，帶入後仍可自由修改文字。</p>
     <div class="card">
       <div id="presetMsg"></div>
@@ -1149,65 +1246,55 @@ function drawAccountsList() {
     </div>
     ${presetListHtml}`;
 
-  document.getElementById("setRoleBtn").onclick = doSetInternalRole;
-  internalAccounts.forEach(a => {
-    if (a.id !== editingInternalId) {
-      document.getElementById(`editinternal-${a.id}`).onclick = () => { editingInternalId = a.id; drawAccountsList(); };
-      return;
-    }
-    document.getElementById(`saveinternal-${a.id}`).onclick = async () => {
-      await saveInternalRoleNow(a.id, document.getElementById(`internalrole-${a.id}`).value);
-      editingInternalId = null;
-      drawAccountsList();
-    };
-    document.getElementById(`delinternal-${a.id}`).onclick = () => deleteInternalRoleNow(a);
-  });
-  applicantAccounts.forEach(a => {
-    document.getElementById(`saveunit-${a.id}`).onclick = () => saveUnitName(a);
-    document.getElementById(`resetpw-${a.id}`).onclick = () => sendResetPassword(a);
-  });
-
-  let newTagColor = TAG_COLOR_PALETTE[0];
-  document.querySelectorAll("#newTagColorSwatches .color-swatch").forEach(el => {
-    el.onclick = () => {
-      newTagColor = el.dataset.color;
-      document.querySelectorAll("#newTagColorSwatches .color-swatch").forEach(s => s.classList.toggle("selected", s.dataset.color === newTagColor));
-    };
-  });
-  document.getElementById("addTagBtn").onclick = () => doAddTag(() => newTagColor);
-  availableTags.forEach(t => {
-    if (t.id !== editingTagId) {
-      document.getElementById(`edittag-${t.id}`).onclick = () => { editingTagId = t.id; drawAccountsList(); };
-      return;
-    }
-    let editColor = t.color;
-    document.querySelectorAll(`#tagcolor-${t.id} .color-swatch`).forEach(el => {
-      el.onclick = () => {
-        editColor = el.dataset.color;
-        document.querySelectorAll(`#tagcolor-${t.id} .color-swatch`).forEach(s => s.classList.toggle("selected", s.dataset.color === editColor));
-      };
-    });
-    document.getElementById(`savetag-${t.id}`).onclick = async () => {
-      await saveTagNow(t.id, document.getElementById(`tagname-${t.id}`).value.trim(), () => editColor);
-      editingTagId = null;
-      drawAccountsList();
-    };
-    document.getElementById(`deltag-${t.id}`).onclick = () => deleteTagNow(t.id);
-  });
-
+  document.getElementById("backFromPresets").onclick = backToMoreMenu;
   document.getElementById("addPresetBtn").onclick = doAddPreset;
   availablePresets.forEach(p => {
     if (p.id !== editingPresetId) {
-      document.getElementById(`editpreset-${p.id}`).onclick = () => { editingPresetId = p.id; drawAccountsList(); };
+      document.getElementById(`editpreset-${p.id}`).onclick = () => { editingPresetId = p.id; drawPresetsSection(); };
       return;
     }
     document.getElementById(`savepreset-${p.id}`).onclick = async () => {
       await savePresetNow(p.id, document.getElementById(`presetname-${p.id}`).value.trim());
       editingPresetId = null;
-      drawAccountsList();
+      drawPresetsSection();
     };
     document.getElementById(`delpreset-${p.id}`).onclick = () => deletePresetNow(p.id);
   });
+}
+
+function renderShareSection() {
+  const c = document.getElementById("content");
+  const internalUrl = location.origin + location.pathname;
+  const externalUrl = internalUrl + "?mode=applicant";
+  c.innerHTML = `
+    <button class="icon-btn" id="backFromShare" aria-label="返回" style="margin-bottom:14px">${ICON_BACK}</button>
+    <div class="section-lbl">分享網站</div>
+    <div class="card">
+      <h3 style="margin:0 0 6px">內部網站</h3>
+      <p style="margin:0 0 14px;font-size:11.5px;color:var(--muted);word-break:break-all">${escapeHtml(internalUrl)}</p>
+      <button class="btn btn-outline" id="shareInternalBtn">分享／複製連結</button>
+    </div>
+    <div class="card">
+      <h3 style="margin:0 0 6px">外部網站（申請單位用）</h3>
+      <p style="margin:0 0 14px;font-size:11.5px;color:var(--muted);word-break:break-all">${escapeHtml(externalUrl)}</p>
+      <button class="btn btn-primary" id="shareExternalBtn">分享給外單位</button>
+    </div>`;
+  document.getElementById("backFromShare").onclick = backToMoreMenu;
+  document.getElementById("shareInternalBtn").onclick = () => shareOrCopyLink(internalUrl, "前支任務派遣中心（內部人員）");
+  document.getElementById("shareExternalBtn").onclick = () => shareOrCopyLink(externalUrl, "前支任務派遣中心（外部申請單位）");
+}
+
+async function shareOrCopyLink(url, title) {
+  if (navigator.share) {
+    try { await navigator.share({ title, url }); } catch (e) { /* 使用者取消分享，不算錯誤 */ }
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(url);
+    alert("已複製連結到剪貼簿");
+  } catch (e) {
+    alert("複製失敗，請手動複製：" + url);
+  }
 }
 
 async function doAddTag(getColor) {
