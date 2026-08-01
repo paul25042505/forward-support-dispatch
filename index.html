@@ -194,7 +194,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-08-01.19";
+const BUILD_VERSION = "2026-08-01.20";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -236,7 +236,6 @@ const ICON_TAG_CAT = `<svg viewBox="0 0 24 24" width="26" height="26" fill="none
 const ICON_PRESET = `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 2.6 5.6 6.1.7-4.5 4.2 1.2 6-5.4-3-5.4 3 1.2-6-4.5-4.2 6.1-.7Z"/></svg>`;
 const ICON_SHARE = `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4M8 8l4-4 4 4"/><path d="M4 13v6a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6"/></svg>`;
 
-const UNITS_INTERNAL = ["營部", "一連", "二連"];
 const STATUS_LABEL = { pending:"待審核", reviewing:"審核中，待收公文", approved:"已核定，等待派遣人員", assigned:"已派遣", filled:"任務完成", rejected:"不核准" };
 const VALID_INTERNAL_ROLES = ["dispatcher", "battalion_hq", "company1", "company2", "admin"];
 const RANK_OPTIONS = ["中校","少校","上尉","中尉","少尉","士官長","上士","中士","下士","上等兵","一等兵","二等兵"];
@@ -1458,14 +1457,50 @@ async function approveRequest(r) {
   } catch (e) { alert("操作失敗：" + e.message); }
 }
 
-async function openAssignPrompt(r) {
-  const choice = prompt("派遣給哪個單位？請輸入：營部 / 一連 / 二連", "營部");
-  if (!choice || !UNITS_INTERNAL.includes(choice.trim())) { if (choice!==null) alert("請輸入正確單位名稱：營部、一連 或 二連"); return; }
+let assignTargetTask = null;
+
+function openAssignPrompt(r) {
+  assignTargetTask = r;
+  const overlay = document.createElement("div");
+  overlay.className = "sheet-overlay";
+  overlay.id = "assignOverlay";
+  overlay.innerHTML = `
+    <div class="sheet">
+      <div class="sheet-title">派遣「${escapeHtml(r.taskName || r.location || "")}」給哪個單位？</div>
+      <div style="padding:16px 20px">
+        <div class="field"><label>單位</label>
+          <select id="assignUnitSelect">
+            <option value="營部">營部</option>
+            <option value="一連">第一連</option>
+            <option value="二連">第二連</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" id="assignConfirmBtn">確認派遣</button>
+        <button class="back-link" id="assignCancelBtn" style="display:block;text-align:center;margin:10px auto 0">取消</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) closeAssignPrompt(); });
+  document.getElementById("assignCancelBtn").onclick = closeAssignPrompt;
+  document.getElementById("assignConfirmBtn").onclick = doAssignConfirm;
+}
+
+function closeAssignPrompt() {
+  const overlay = document.getElementById("assignOverlay");
+  if (overlay) overlay.remove();
+  assignTargetTask = null;
+}
+
+async function doAssignConfirm() {
+  const r = assignTargetTask;
+  if (!r) return;
+  const choice = document.getElementById("assignUnitSelect").value;
   try {
     await updateDoc(doc(db, COL_REQUESTS, r.id), {
-      status: "assigned", assignedUnit: choice.trim(),
+      status: "assigned", assignedUnit: choice,
       reviewedBy: currentUser.uid, reviewedAt: serverTimestamp(),
     });
+    closeAssignPrompt();
   } catch (e) { alert("派遣失敗：" + e.message); }
 }
 
