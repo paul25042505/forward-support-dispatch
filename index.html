@@ -216,7 +216,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-08-02.8";
+const BUILD_VERSION = "2026-08-02.9";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -776,6 +776,10 @@ function isThisMonth(d) {
   const now = new Date();
   return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
 }
+function isToday(d) {
+  const now = new Date();
+  return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+}
 
 // ---- 子頁：任務（列表／行事曆切換）----
 let taskViewMode = "list"; // list | calendar
@@ -925,30 +929,53 @@ function renderCalendarView() {
   });
 }
 
-// ---- 子頁：紀錄（本人／本週／本月）----
-let recordFilter = "week"; // self | week | month
+// ---- 子頁：紀錄（本日／本週／本月／自訂日期）----
+let recordFilter = "week"; // today | week | month | custom
+let recordCustomStart = null; // 自訂日期範圍的起始（yyyy-mm-dd 字串）
+let recordCustomEnd = null;   // 自訂日期範圍的結束（yyyy-mm-dd 字串）
 
 function renderRecordsView() {
   const c = document.getElementById("content");
+  const todayStr = toDateValue(new Date());
+  if (!recordCustomStart) recordCustomStart = todayStr;
+  if (!recordCustomEnd) recordCustomEnd = todayStr;
   c.innerHTML = `
     <div class="tabs" style="margin:-16px -20px 16px;padding:12px 20px">
-      <div class="tab" data-recfilter="self">本人</div>
+      <div class="tab" data-recfilter="today">本日</div>
       <div class="tab" data-recfilter="week">本週</div>
       <div class="tab" data-recfilter="month">本月</div>
+      <div class="tab" data-recfilter="custom">自訂日期</div>
+    </div>
+    <div id="recordCustomRange" class="row2" style="margin:-8px 0 16px;display:none">
+      <input id="recordStartDate" type="date" value="${recordCustomStart}">
+      <input id="recordEndDate" type="date" value="${recordCustomEnd}">
     </div>
     <div id="recordListArea"></div>`;
   document.querySelectorAll(".tabs [data-recfilter]").forEach(el => el.onclick = () => { recordFilter = el.dataset.recfilter; drawRecordsList(); });
+  document.getElementById("recordStartDate").onchange = (e) => { recordCustomStart = e.target.value; drawRecordsList(); };
+  document.getElementById("recordEndDate").onchange = (e) => { recordCustomEnd = e.target.value; drawRecordsList(); };
   drawRecordsList();
 }
 
 function drawRecordsList() {
   document.querySelectorAll(".tabs [data-recfilter]").forEach(el => el.classList.toggle("active", el.dataset.recfilter === recordFilter));
+  const customRange = document.getElementById("recordCustomRange");
+  if (customRange) customRange.style.display = recordFilter === "custom" ? "grid" : "none";
   const area = document.getElementById("recordListArea");
   if (!area) return;
   let list = allRequests;
-  if (recordFilter === "self") list = list.filter(r => r.reviewedBy === currentUser.uid || r.createdBy === currentUser.uid);
+  if (recordFilter === "today") list = list.filter(r => r.taskStartTime && isToday(tsToDate(r.taskStartTime)));
   else if (recordFilter === "week") list = list.filter(r => r.taskStartTime && isThisWeek(tsToDate(r.taskStartTime)));
   else if (recordFilter === "month") list = list.filter(r => r.taskStartTime && isThisMonth(tsToDate(r.taskStartTime)));
+  else if (recordFilter === "custom") {
+    const start = recordCustomStart ? new Date(`${recordCustomStart}T00:00:00`) : null;
+    const end = recordCustomEnd ? new Date(`${recordCustomEnd}T23:59:59`) : null;
+    list = list.filter(r => {
+      if (!r.taskStartTime) return false;
+      const d = tsToDate(r.taskStartTime);
+      return (!start || d >= start) && (!end || d <= end);
+    });
+  }
   area.innerHTML = list.length === 0
     ? `<div class="empty">這個範圍內沒有任務紀錄</div>`
     : list.map(r => taskCardHtml(r, false)).join("");
