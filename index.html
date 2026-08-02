@@ -210,7 +210,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   getFirestore, doc, getDoc, getDocs, addDoc, setDoc, updateDoc, deleteDoc, collection,
-  query, where, orderBy, onSnapshot, serverTimestamp
+  query, where, orderBy, onSnapshot, serverTimestamp, runTransaction
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-functions.js";
 
@@ -226,7 +226,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-08-02.12";
+const BUILD_VERSION = "2026-08-02.13";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -1935,8 +1935,14 @@ async function saveUnitName(a) {
 
 async function deleteApplicantAccount(a) {
   const name = a.fsr_unitName || a.email || a.id;
-  if (!confirm(`確定要刪除「${name}」這個申請單位帳號嗎？刪除後對方會無法登入，需要重新註冊；單位代碼也會被釋出，可以再被別人（或同一單位）拿去註冊。這個動作無法復原。`)) return;
+  if (!confirm(`確定要刪除「${name}」這個申請單位帳號嗎？刪除後對方會無法登入，需要重新註冊；單位代碼會被完全釋出，可以再被別人（或同一單位）拿去註冊。這個動作無法復原。`)) return;
   try {
+    // 先刪底層 Firebase Auth 帳號（Admin SDK 才能刪別人的帳號，前端做不到），
+    // 成功了才刪 Firestore 資料——順序反過來的話，如果 Auth 刪除失敗，會留下
+    // Firestore 資料都清空、但 Auth 帳號還在的狀況，單位代碼一樣卡住沒釋出，
+    // 等於沒修到問題。
+    const call = httpsCallable(functionsClient, "deleteApplicantAuthAccount");
+    await call({ targetUid: a.id });
     await deleteDoc(doc(db, COL_APPLICANT_PROFILES, a.id));
     if (a.unitCode) {
       try { await deleteDoc(doc(db, COL_UNITS, a.unitCode)); } catch (e) { /* 單位目錄刪不掉不擋主流程，帳號本身已經刪除生效 */ }
@@ -2480,23 +2486,31 @@ async function doFillConfirm() {
     vehicleNumber,
   };
   try {
-    if (fillTargetDocId) {
-      await updateDoc(doc(db, COL_ASSIGNMENTS, fillTargetDocId), {
-        vehicleCommanderRank: commanderRank, vehicleCommanderName: commanderName,
-        commanderUid: contactFields.commanderUid, driverUid: contactFields.driverUid,
-        driverRank, driverName, vehicleNumber,
-      });
-      await updateDoc(doc(db, COL_REQUESTS, r.id), contactFields);
-    } else {
-      await addDoc(collection(db, COL_ASSIGNMENTS), {
-        requestId: r.id, unit: unitKeyToLabel(fillTargetRoleKey),
-        vehicleCommanderRank: commanderRank, vehicleCommanderName: commanderName,
-        commanderUid: contactFields.commanderUid, driverUid: contactFields.driverUid,
-        driverRank, driverName, vehicleNumber,
-        filledBy: currentUser.uid, filledAt: serverTimestamp(),
-      });
-      await updateDoc(doc(db, COL_REQUESTS, r.id), { status: "filled", ...contactFields });
-    }
+    // 兩份文件（forward_support_assignments + forward_support_requests）包成
+    // 一個交易，要嘛一起成功要嘛一起失敗。原本是兩個各自獨立的 await，中間
+    // 網路斷線的話會出現「填寫紀錄已經新增，但任務狀態沒變成已派遣」的資料
+    // 不一致；使用者以為沒送出成功而重按一次，還會因為 fillTargetDocId 還是
+    // 空的而多新增一筆重複的填寫紀錄。
+    const reqRef = doc(db, COL_REQUESTS, r.id);
+    await runTransaction(db, async (tx) => {
+      if (fillTargetDocId) {
+        tx.update(doc(db, COL_ASSIGNMENTS, fillTargetDocId), {
+          vehicleCommanderRank: commanderRank, vehicleCommanderName: commanderName,
+          commanderUid: contactFields.commanderUid, driverUid: contactFields.driverUid,
+          driverRank, driverName, vehicleNumber,
+        });
+        tx.update(reqRef, contactFields);
+      } else {
+        tx.set(doc(collection(db, COL_ASSIGNMENTS)), {
+          requestId: r.id, unit: unitKeyToLabel(fillTargetRoleKey),
+          vehicleCommanderRank: commanderRank, vehicleCommanderName: commanderName,
+          commanderUid: contactFields.commanderUid, driverUid: contactFields.driverUid,
+          driverRank, driverName, vehicleNumber,
+          filledBy: currentUser.uid, filledAt: serverTimestamp(),
+        });
+        tx.update(reqRef, { status: "filled", ...contactFields });
+      }
+    });
     const refreshRoleKey = (activeSection === "more" && moreSection === "rolepreview") ? fillTargetRoleKey : null;
     closeFillSheet();
     if (refreshRoleKey) renderRolePreviewDetail(refreshRoleKey);

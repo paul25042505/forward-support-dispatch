@@ -255,7 +255,7 @@
 
 貼上後按「發布」。（`forward_support_units` 單位代碼目錄的刪除權限第 5 版就已經開放給 `isFsrDispatcher()`，這次刪除帳號時會一併刪掉對應的單位代碼目錄項目，不用再改。）
 
-**已知限制：** 刪除只會清掉 Firestore 裡的申請單位資料（`forward_support_applicant_profiles` 跟 `forward_support_units` 目錄項目），底層的 Firebase Auth 帳號本身不會被刪除（用目前的環境做不到，需要 Cloud Functions + Admin SDK）。實際效果等同於帳號失效：對方原本的登入密碼還在，但登入後系統找不到 profile 資料，會被導去「請重新註冊」，等於要重新走一次註冊流程才能再使用。
+**（2026-08-02 更新：下面這條限制已經解決）** 原本刪除只會清掉 Firestore 裡的申請單位資料，底層 Firebase Auth 帳號留著不會刪，導致「單位代碼釋出給別人註冊」這件事實際上不成立——同一個代碼被別人拿去註冊時會撞到 email 已存在，改用新密碼登入舊帳號，密碼當然不對，顯示「單位或密碼錯誤」。現在已經有 Cloud Functions + Admin SDK 的部署能力，新增了 `deleteApplicantAuthAccount` 函式，「刪除帳號」會先呼叫這支把 Auth 帳號也刪掉，成功後才刪 Firestore 資料，單位代碼才會真的釋出可以重新註冊。
 
 ### ⚠️ 2026-08-01 新增：單位代碼改成跟衛生營系統一致（hq/co1/co2）
 
