@@ -205,7 +205,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-08-01.47";
+const BUILD_VERSION = "2026-08-01.48";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -956,8 +956,8 @@ function renderDispatcherCreateView() {
       <select id="cAssign">
         <option value="">不分發，先待審核</option>
         <option value="營部">營部</option>
-        <option value="一連">一連</option>
-        <option value="二連">二連</option>
+        <option value="一連">第一連</option>
+        <option value="二連">第二連</option>
       </select>
     </div>
     <button class="btn btn-primary" id="createBtn">送出任務</button>`;
