@@ -105,6 +105,12 @@
   .stat .l{font-size:10px;color:var(--muted);margin-top:2px}
   .stat.amber .n{color:var(--amber)} .stat.blue .n{color:var(--blue)} .stat.green .n{color:var(--green)}
 
+  /* 首頁：各單位本週任務量小卡 */
+  .unit-load-row{display:flex;gap:10px;margin-bottom:16px}
+  .unit-load-chip{flex:1;min-width:0;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:10px 6px;text-align:center;box-shadow:var(--shadow)}
+  .unit-load-chip .n{display:block;font-family:'JetBrains Mono';font-size:17px;font-weight:700;color:var(--accent)}
+  .unit-load-chip .l{font-size:10px;color:var(--muted);margin-top:2px}
+
   .status-cards{display:flex;gap:8px;margin-bottom:16px;overflow-x:auto}
   .status-card{flex:0 0 auto;width:84px;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:11px 4px;text-align:center;cursor:pointer;box-shadow:var(--shadow);position:relative;overflow:hidden;animation:fadeSlideUp .4s cubic-bezier(.22,1,.36,1) both}
   .status-card .n{font-family:'JetBrains Mono';font-size:19px;font-weight:700}
@@ -220,7 +226,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-08-02.10";
+const BUILD_VERSION = "2026-08-02.11";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -717,27 +723,62 @@ function renderDispatcherSection() {
   else if (activeSection === "edit") renderEditTaskView(editingTask);
 }
 
-// ---- 子頁：首頁（待處理任務 + 本週任務總覽）----
+// ---- 子頁：首頁（搜尋 + 待處理任務 + 各單位本週負擔 + 本週任務總覽）----
+let homeSearchQuery = "";
+let homeWeekSelectedDate = null; // yyyy-mm-dd，點本週小行事曆篩選當天
+
 function renderHomeView() {
   const c = document.getElementById("content");
-  const needsAction = allRequests.filter(r => ["pending","reviewing","approved"].includes(r.status));
-  const weekTasks = allRequests.filter(r => r.taskStartTime && isThisWeek(tsToDate(r.taskStartTime)));
-  const statsHtml = `
-    <div class="stats">
-      <div class="stat amber"><div class="n">${needsAction.length}</div><div class="l">待處理</div></div>
-      <div class="stat blue"><div class="n">${weekTasks.length}</div><div class="l">本週任務</div></div>
+  c.innerHTML = `
+    <div class="field" style="margin-bottom:16px">
+      <input id="homeSearchInput" placeholder="搜尋任務名稱／單位／編號" value="${escapeHtml(homeSearchQuery)}">
+    </div>
+    <div id="homeStatsArea"></div>
+    <div id="homeResultsArea"></div>`;
+  const searchInput = document.getElementById("homeSearchInput");
+  searchInput.oninput = (e) => { homeSearchQuery = e.target.value; drawHomeResults(); };
+  drawHomeResults();
+}
+
+function filterTasksBySearch(list, q) {
+  const needle = q.trim().toLowerCase();
+  if (!needle) return list;
+  return list.filter(r =>
+    (r.taskName || "").toLowerCase().includes(needle) ||
+    (r.applicantUnit || "").toLowerCase().includes(needle) ||
+    (r.location || "").toLowerCase().includes(needle) ||
+    (r.id || "").toLowerCase().includes(needle)
+  );
+}
+
+// 本週橫向小行事曆（週日～週六），點日期篩選下面「本週任務」清單只顯示那天，
+// 再點一次取消篩選——沿用「任務」頁行事曆的 .cal-* 樣式，只是縮成一排。
+function weekStripHtml(weekTasks) {
+  const now = new Date();
+  const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay());
+  const byDate = {};
+  weekTasks.forEach(r => {
+    const key = fmtDateKey(tsToDate(r.taskStartTime));
+    (byDate[key] = byDate[key] || []).push(r);
+  });
+  const todayKey = fmtDateKey(now);
+  let cells = "";
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(startOfWeek.getFullYear(), startOfWeek.getMonth(), startOfWeek.getDate() + i);
+    const key = fmtDateKey(d);
+    const count = (byDate[key] || []).length;
+    cells += `<div class="cal-cell ${key===todayKey?"today":""} ${key===homeWeekSelectedDate?"selected":""}" data-date="${key}">
+      <span class="daynum">${d.getDate()}</span>
+      ${count > 0 ? `<span class="dot"></span>` : ""}
     </div>`;
-  const pendingHtml = needsAction.length === 0
-    ? `<div class="empty">目前沒有待處理任務</div>`
-    : needsAction.map(r => taskCardHtml(r, true)).join("");
-  const weekHtml = weekTasks.length === 0
-    ? `<div class="empty">本週目前沒有排定的任務</div>`
-    : weekTasks.map(r => taskCardHtml(r, false)).join("");
-  c.innerHTML = statsHtml +
-    `<div class="section-lbl">待處理</div>${pendingHtml}` +
-    `<div class="section-lbl" style="margin-top:22px">本週任務</div>${weekHtml}`;
-  bindCardMenu(c);
-  needsAction.forEach(r => {
+  }
+  return `
+    <div class="cal-weekdays">${["日","一","二","三","四","五","六"].map(w=>`<div>${w}</div>`).join("")}</div>
+    <div class="cal-grid" id="homeWeekStrip" style="margin-bottom:14px">${cells}</div>`;
+}
+
+function bindHomeCardActions(list) {
+  list.forEach(r => {
     const reviewBtn = document.getElementById(`review-${r.id}`);
     if (reviewBtn) reviewBtn.onclick = () => startReviewRequest(r);
     const approveBtn = document.getElementById(`approve-${r.id}`);
@@ -746,6 +787,70 @@ function renderHomeView() {
     if (assignBtn) assignBtn.onclick = () => openAssignPrompt(r);
     const rejectBtn = document.getElementById(`reject-${r.id}`);
     if (rejectBtn) rejectBtn.onclick = () => rejectRequest(r);
+    const changeUnitBtn = document.getElementById(`changeunit-${r.id}`);
+    if (changeUnitBtn) changeUnitBtn.onclick = () => openAssignPrompt(r);
+    const cancelAssignBtn = document.getElementById(`cancelassign-${r.id}`);
+    if (cancelAssignBtn) cancelAssignBtn.onclick = () => cancelDispatch(r);
+  });
+}
+
+// 只重畫統計/結果區，不動搜尋框本身（換掉 input 的 DOM 節點會讓打字打到一半
+// 失焦、游標跳掉）——首頁隨 Firestore 即時更新時（watchRequestsForDispatcher）
+// 呼叫這支，不是整頁 renderHomeView()。
+function drawHomeResults() {
+  const statsArea = document.getElementById("homeStatsArea");
+  const resultsArea = document.getElementById("homeResultsArea");
+  if (!statsArea || !resultsArea) return;
+
+  const needsAction = allRequests.filter(r => ["pending","reviewing","approved"].includes(r.status));
+  const weekTasks = allRequests.filter(r => r.taskStartTime && isThisWeek(tsToDate(r.taskStartTime)));
+
+  const q = homeSearchQuery.trim();
+  if (q) {
+    const results = filterTasksBySearch(allRequests, q);
+    statsArea.innerHTML = "";
+    resultsArea.innerHTML = `<div class="section-lbl">搜尋結果・共 ${results.length} 筆</div>` +
+      (results.length === 0 ? `<div class="empty">找不到符合的任務</div>` : results.map(r => taskCardHtml(r, true)).join(""));
+    bindCardMenu(resultsArea);
+    bindHomeCardActions(results);
+    return;
+  }
+
+  // 各單位本週任務量，給承辦人分派時參考哪個單位這週比較吃緊；只算已經
+  // 分發出去的（assignedUnit 有值），待審核/審核中還沒分單位的不計入。
+  const unitCounts = { hq: 0, co1: 0, co2: 0 };
+  weekTasks.forEach(r => { if (r.assignedUnit && unitCounts[r.assignedUnit] !== undefined) unitCounts[r.assignedUnit]++; });
+
+  statsArea.innerHTML = `
+    <div class="stats">
+      <div class="stat amber"><div class="n">${needsAction.length}</div><div class="l">待處理</div></div>
+      <div class="stat blue"><div class="n">${weekTasks.length}</div><div class="l">本週任務</div></div>
+    </div>
+    <div class="unit-load-row">
+      ${Object.keys(REAL_UNIT_LABEL).map(k => `<div class="unit-load-chip"><span class="n">${unitCounts[k]}</span><span class="l">${REAL_UNIT_LABEL[k]}</span></div>`).join("")}
+    </div>`;
+
+  const pendingHtml = needsAction.length === 0
+    ? `<div class="empty">目前沒有待處理任務</div>`
+    : needsAction.map(r => taskCardHtml(r, true)).join("");
+
+  const weekListFiltered = homeWeekSelectedDate
+    ? weekTasks.filter(r => fmtDateKey(tsToDate(r.taskStartTime)) === homeWeekSelectedDate)
+    : weekTasks;
+  const weekHtml = weekListFiltered.length === 0
+    ? `<div class="empty">${homeWeekSelectedDate ? "這天沒有排定的任務" : "本週目前沒有排定的任務"}</div>`
+    : weekListFiltered.map(r => taskCardHtml(r, false)).join("");
+
+  resultsArea.innerHTML =
+    `<div class="section-lbl">待處理</div>${pendingHtml}` +
+    `<div class="section-lbl" style="margin-top:22px">本週任務</div>` +
+    weekStripHtml(weekTasks) +
+    weekHtml;
+
+  bindCardMenu(resultsArea);
+  bindHomeCardActions(needsAction);
+  document.querySelectorAll("#homeWeekStrip [data-date]").forEach(el => {
+    el.onclick = () => { homeWeekSelectedDate = (homeWeekSelectedDate === el.dataset.date) ? null : el.dataset.date; drawHomeResults(); };
   });
 }
 
@@ -2120,7 +2225,7 @@ function watchRequestsForDispatcher() {
   const q = query(collection(db, COL_REQUESTS), orderBy("createdAt", "desc"));
   unsubRequests = onSnapshot(q, (snap) => {
     allRequests = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    if (activeSection === "home") renderHomeView();
+    if (activeSection === "home") drawHomeResults();
     else if (activeSection === "tasks") { if (taskViewMode === "calendar") renderCalendarView(); else renderDispatcherContent(); }
     else if (activeSection === "records") drawRecordsList();
   });
