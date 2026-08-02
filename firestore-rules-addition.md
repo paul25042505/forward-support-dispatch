@@ -257,6 +257,25 @@
 
 **已知限制：** 刪除只會清掉 Firestore 裡的申請單位資料（`forward_support_applicant_profiles` 跟 `forward_support_units` 目錄項目），底層的 Firebase Auth 帳號本身不會被刪除（用目前的環境做不到，需要 Cloud Functions + Admin SDK）。實際效果等同於帳號失效：對方原本的登入密碼還在，但登入後系統找不到 profile 資料，會被導去「請重新註冊」，等於要重新走一次註冊流程才能再使用。
 
+### ⚠️ 2026-08-01 新增：單位代碼改成跟衛生營系統一致（hq/co1/co2）
+
+前支任務系統的「單位」欄位（`forward_support_requests.assignedUnit`、`forward_support_assignments.unit`）原本存中文「營部／一連／二連」，現在改成跟衛生營系統的 `users`／`vehicles` 集合共用同一套代碼：`hq`／`co1`／`co2`。畫面顯示文字不變，還是「營部／第一連／第二連」，只有 Firestore 裡實際存的值改變。
+
+找到 `fsrUnitLabel()` 這個函式：
+```
+    function fsrUnitLabel() {
+      return {'battalion_hq': '營部', 'company1': '一連', 'company2': '二連'}[fsrRole()];
+    }
+```
+改成：
+```
+    function fsrUnitLabel() {
+      return {'battalion_hq': 'hq', 'company1': 'co1', 'company2': 'co2'}[fsrRole()];
+    }
+```
+
+貼上後按「發布」。**這裡只改了規則，程式碼那邊已經同步改好；但 Firestore 裡「既有」的任務／填寫紀錄，`assignedUnit`／`unit` 欄位還是舊的中文值，需要另外跑一次資料搬移（用服務帳戶金鑰直接處理，不需要手動改資料）。**規則跟資料兩邊沒有同時生效的話，舊資料會暫時對不上新規則，可能出現「調度員看不到自己單位已經指派的任務」這種狀況，建議規則貼完、資料搬移都做完後再讓大家繼續操作。
+
 ---
 
 ## 第 1～4 版（歷史記錄，已被第 5 版取代，僅供參考）
