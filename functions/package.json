@@ -1,0 +1,13 @@
+{
+  "name": "forward-support-dispatch-functions",
+  "description": "前支任務派遣中心專用的 Cloud Functions（跟衛生營出勤系統共用同一個 Firebase 專案，但函式名稱/邏輯完全獨立，互不影響）",
+  "engines": {
+    "node": "20"
+  },
+  "main": "index.js",
+  "dependencies": {
+    "firebase-admin": "^12.6.0",
+    "firebase-functions": "^5.1.1"
+  },
+  "private": true
+}
