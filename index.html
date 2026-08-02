@@ -99,8 +99,8 @@
   .msg.error{background:color-mix(in srgb, var(--red) 14%, transparent);color:var(--red)}
   .msg.ok{background:color-mix(in srgb, var(--green) 14%, transparent);color:var(--green)}
 
-  .stats{display:flex;gap:10px;margin-bottom:16px;overflow-x:auto}
-  .stat{flex-shrink:0;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:11px 16px;min-width:78px;box-shadow:var(--shadow);animation:fadeSlideUp .4s cubic-bezier(.22,1,.36,1) both}
+  .stats{display:flex;gap:10px;margin-bottom:16px}
+  .stat{flex:1;min-width:0;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:11px 16px;box-shadow:var(--shadow)}
   .stat .n{font-family:'JetBrains Mono';font-size:20px;font-weight:700}
   .stat .l{font-size:10px;color:var(--muted);margin-top:2px}
   .stat.amber .n{color:var(--amber)} .stat.blue .n{color:var(--blue)} .stat.green .n{color:var(--green)}
@@ -226,7 +226,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-08-02.11";
+const BUILD_VERSION = "2026-08-02.12";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
