@@ -90,3 +90,41 @@ exports.selfResetApplicantPassword = onCall(async (request) => {
   await auth.updateUser(targetUid, { password: newPassword });
   return { ok: true };
 });
+
+// 管理員刪除申請單位帳號時，把底層 Firebase Auth 帳號也一併刪除。
+// 「刪除帳號」原本只刪 Firestore 資料（forward_support_applicant_profiles／
+// forward_support_units），Auth 帳號（單位代碼對應的合成 email）一直留著；
+// 如果同一個單位代碼之後被別的單位拿去註冊，會撞到「email 已存在」，改成
+// 用新輸入的密碼嘗試登入舊帳號，密碼當然對不上，顯示「單位或密碼錯誤」——
+// 「單位代碼會被釋出給別人註冊」這件事實際上沒有真的成立。只有 Admin SDK
+// 能刪除別人的 Auth 帳號，前端做不到，所以需要這支函式。限管理員呼叫，
+// 對齊 forward_support_applicant_profiles 的 allow delete: if isFsrAdmin()。
+exports.deleteApplicantAuthAccount = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "請先登入");
+  }
+  const callerDoc = await db.collection("users").doc(request.auth.uid).get();
+  const callerRole = callerDoc.exists ? callerDoc.data().fsr_role : null;
+  if (callerRole !== "admin") {
+    throw new HttpsError("permission-denied", "只有管理員能刪除申請單位帳號");
+  }
+
+  const targetUid = request.data && request.data.targetUid;
+  if (!targetUid || typeof targetUid !== "string") {
+    throw new HttpsError("invalid-argument", "缺少要刪除的帳號");
+  }
+
+  const targetProfile = await db.collection("forward_support_applicant_profiles").doc(targetUid).get();
+  if (!targetProfile.exists || targetProfile.data().fsr_role !== "applicant") {
+    throw new HttpsError("not-found", "找不到這個申請單位帳號");
+  }
+
+  try {
+    await auth.deleteUser(targetUid);
+  } catch (e) {
+    // 已經刪過 Auth 帳號（例如上次呼叫成功但後續 Firestore 刪除失敗，
+    // 管理員重試一次）算是達成目的，不當成錯誤擋下來。
+    if (e.code !== "auth/user-not-found") throw e;
+  }
+  return { ok: true };
+});
