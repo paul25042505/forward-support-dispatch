@@ -131,7 +131,7 @@
   .tabbar .item.active{color:var(--accent);font-weight:700}
   /* 水滴狀的分頁指示器：跟著切換的分頁滑過去，用微微過衝（overshoot）的
      曲線模擬液體的彈性感，不是機械式的線性平移 */
-  .tab-indicator{position:absolute;top:8px;left:0;height:38px;width:25%;border-radius:16px;background:color-mix(in srgb, var(--accent) 14%, transparent);transition:transform .5s cubic-bezier(.34,1.45,.4,1),width .3s ease;opacity:0;pointer-events:none;z-index:0}
+  .tab-indicator{position:absolute;top:8px;left:0;height:38px;width:25%;border-radius:16px;background:color-mix(in srgb, var(--accent) 14%, transparent);transition:transform .5s cubic-bezier(.34,1.45,.4,1),width .3s ease,top .3s ease,height .3s ease;opacity:0;pointer-events:none;z-index:0}
 
   /* ---------- 水滴漣漪點擊效果 ---------- */
   .ripple{position:absolute;border-radius:50%;background:radial-gradient(circle, color-mix(in srgb, var(--accent) 40%, transparent) 0%, color-mix(in srgb, var(--accent) 12%, transparent) 60%, transparent 100%);transform:scale(0);opacity:.6;animation:rippleAnim .6s cubic-bezier(.22,1,.36,1) forwards;pointer-events:none}
@@ -216,7 +216,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-08-02.7";
+const BUILD_VERSION = "2026-08-02.8";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -2737,7 +2737,15 @@ function displayNameOf(p) {
     const activeIdx = Array.from(items).findIndex(el => el.classList.contains("active"));
     const ind = ensureIndicator(tabbar);
     if (activeIdx === -1 || items.length === 0) { ind.style.opacity = "0"; return; }
+    // 高度／垂直位置直接量測分頁按鈕本人的實際大小，不要用寫死的 px 值猜——
+    // 圖示大小、字級以後再調整時，指示器都會自動跟著對齊，不會發生圖示/文字
+    // 被指示器蓋不到、露出格子外面的情況。
+    const tabbarRect = tabbar.getBoundingClientRect();
+    const itemRect = items[activeIdx].getBoundingClientRect();
+    const inset = 4;
     ind.style.width = (100 / items.length) + "%";
+    ind.style.top = (itemRect.top - tabbarRect.top + inset) + "px";
+    ind.style.height = Math.max(itemRect.height - inset * 2, 20) + "px";
     ind.style.transform = `translateX(${activeIdx * 100}%)`;
     ind.style.opacity = "1";
   }
