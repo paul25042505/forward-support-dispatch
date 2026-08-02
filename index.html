@@ -49,7 +49,7 @@
 
   .content{flex:1;min-width:0;padding:16px 20px calc(140px + env(safe-area-inset-bottom));overflow-y:auto}
 
-  .card{background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:14px 16px;margin-bottom:12px;box-shadow:var(--shadow)}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:14px 16px;margin-bottom:12px;box-shadow:var(--shadow);position:relative;overflow:hidden;animation:fadeSlideUp .4s cubic-bezier(.22,1,.36,1) both}
   .task-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;gap:8px}
   .id{font-family:'JetBrains Mono';font-size:10.5px;color:var(--muted)}
   .tag{font-family:'JetBrains Mono';font-size:10px;padding:3px 8px;border-radius:8px;display:inline-flex;align-items:center;gap:4px;font-weight:600;white-space:nowrap}
@@ -79,7 +79,7 @@
   .person-info .val .sub{display:block;color:var(--muted);font-weight:500;font-size:11.5px;margin-top:1px}
   .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 
-  .btn{display:block;width:100%;text-align:center;padding:13px;border-radius:18px;font-weight:700;font-size:13.5px;border:none;cursor:pointer}
+  .btn{display:block;width:100%;text-align:center;padding:13px;border-radius:18px;font-weight:700;font-size:13.5px;border:none;cursor:pointer;position:relative;overflow:hidden}
   .btn-primary{background:var(--accent);color:var(--fab-text)}
   .btn-outline{background:transparent;border:1px solid var(--line);color:var(--text)}
   .btn-small{padding:8px 12px;font-size:11.5px;border-radius:14px;flex:1}
@@ -96,19 +96,19 @@
   .msg.ok{background:color-mix(in srgb, var(--green) 14%, transparent);color:var(--green)}
 
   .stats{display:flex;gap:10px;margin-bottom:16px;overflow-x:auto}
-  .stat{flex-shrink:0;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:11px 16px;min-width:78px;box-shadow:var(--shadow)}
+  .stat{flex-shrink:0;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:11px 16px;min-width:78px;box-shadow:var(--shadow);animation:fadeSlideUp .4s cubic-bezier(.22,1,.36,1) both}
   .stat .n{font-family:'JetBrains Mono';font-size:20px;font-weight:700}
   .stat .l{font-size:10px;color:var(--muted);margin-top:2px}
   .stat.amber .n{color:var(--amber)} .stat.blue .n{color:var(--blue)} .stat.green .n{color:var(--green)}
 
   .status-cards{display:flex;gap:8px;margin-bottom:16px;overflow-x:auto}
-  .status-card{flex:0 0 auto;width:84px;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:11px 4px;text-align:center;cursor:pointer;box-shadow:var(--shadow)}
+  .status-card{flex:0 0 auto;width:84px;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:11px 4px;text-align:center;cursor:pointer;box-shadow:var(--shadow);position:relative;overflow:hidden;animation:fadeSlideUp .4s cubic-bezier(.22,1,.36,1) both}
   .status-card .n{font-family:'JetBrains Mono';font-size:19px;font-weight:700}
   .status-card .l{font-size:10px;color:var(--muted);margin-top:2px}
   .status-card.amber .n{color:var(--amber)} .status-card.purple .n{color:var(--purple)} .status-card.cyan .n{color:var(--cyan)} .status-card.blue .n{color:var(--blue)} .status-card.green .n{color:var(--green)} .status-card.gray .n{color:var(--text)}
 
   .more-menu{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-  .more-card{background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:22px 14px;text-align:center;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:10px;color:var(--muted);box-shadow:var(--shadow)}
+  .more-card{background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:22px 14px;text-align:center;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:10px;color:var(--muted);box-shadow:var(--shadow);position:relative;overflow:hidden;animation:fadeSlideUp .4s cubic-bezier(.22,1,.36,1) both}
   .more-card h3{margin:0;font-size:13.5px;color:var(--text)}
   .status-card.active{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
   .status-card.active .l{color:var(--accent);font-weight:700}
@@ -127,13 +127,23 @@
   .cal-cell .dot{width:5px;height:5px;border-radius:50%;background:var(--accent);margin-top:3px}
 
   .tabbar{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:var(--app-max-width);height:calc(74px + env(safe-area-inset-bottom));background:var(--panel);border-top:1px solid var(--line);display:flex;padding-bottom:calc(14px + env(safe-area-inset-bottom));z-index:10}
-  .tabbar .item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:10px;color:var(--muted);cursor:pointer;background:none;border:none;font-family:inherit}
+  .tabbar .item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:10px;color:var(--muted);cursor:pointer;background:none;border:none;font-family:inherit;position:relative;z-index:1;transition:color .25s ease}
   .tabbar .item.active{color:var(--accent);font-weight:700}
+  /* 水滴狀的分頁指示器：跟著切換的分頁滑過去，用微微過衝（overshoot）的
+     曲線模擬液體的彈性感，不是機械式的線性平移 */
+  .tab-indicator{position:absolute;top:8px;left:0;height:38px;width:25%;border-radius:16px;background:color-mix(in srgb, var(--accent) 14%, transparent);transition:transform .5s cubic-bezier(.34,1.45,.4,1),width .3s ease;opacity:0;pointer-events:none;z-index:0}
 
-  .fab{position:fixed;right:20px;bottom:calc(90px + env(safe-area-inset-bottom));width:56px;height:56px;border-radius:50%;background:var(--accent);color:var(--fab-text);border:none;font-size:28px;line-height:1;display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow-fab);z-index:12;cursor:pointer}
+  /* ---------- 水滴漣漪點擊效果 ---------- */
+  .ripple{position:absolute;border-radius:50%;background:radial-gradient(circle, color-mix(in srgb, var(--accent) 40%, transparent) 0%, color-mix(in srgb, var(--accent) 12%, transparent) 60%, transparent 100%);transform:scale(0);opacity:.6;animation:rippleAnim .6s cubic-bezier(.22,1,.36,1) forwards;pointer-events:none}
+  @keyframes rippleAnim{ to{ transform:scale(1); opacity:0 } }
+
+  /* ---------- 卡片/區塊柔和進場動畫 ---------- */
+  @keyframes fadeSlideUp{ from{ opacity:0; transform:translateY(10px) scale(.98) } to{ opacity:1; transform:translateY(0) scale(1) } }
+
+  .fab{position:fixed;right:20px;bottom:calc(90px + env(safe-area-inset-bottom));width:56px;height:56px;border-radius:50%;background:var(--accent);color:var(--fab-text);border:none;font-size:28px;line-height:1;display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow-fab);z-index:12;cursor:pointer;overflow:hidden}
   @media (min-width:768px){ .fab{right:calc(50% - (var(--app-max-width) / 2) + 20px)} }
   .viewmode-cards{display:flex;gap:10px;margin:-16px 0 0;padding:16px 0;position:sticky;top:-16px;z-index:5;background:var(--bg)}
-  .viewmode-card{width:76px;height:76px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:20px;cursor:pointer;font-size:12px;font-weight:600;color:var(--muted)}
+  .viewmode-card{width:76px;height:76px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:20px;cursor:pointer;font-size:12px;font-weight:600;color:var(--muted);position:relative;overflow:hidden}
   .viewmode-card.active{background:color-mix(in srgb, var(--accent) 14%, transparent);border-color:var(--accent);color:var(--accent)}
 
   /* ---------- 標籤 ---------- */
@@ -149,7 +159,7 @@
   .color-swatches{display:flex;gap:8px;flex-wrap:wrap}
   .color-swatch{width:28px;height:28px;border-radius:50%;cursor:pointer;border:2px solid transparent}
   .color-swatch.selected{border-color:var(--text)}
-  .icon-btn{flex-shrink:0;width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:var(--panel2);color:var(--muted);display:flex;align-items:center;justify-content:center;cursor:pointer}
+  .icon-btn{flex-shrink:0;width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:var(--panel2);color:var(--muted);display:flex;align-items:center;justify-content:center;cursor:pointer;position:relative;overflow:hidden}
 
   /* ---------- 底部彈出選單／彈窗 ---------- */
   .sheet-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:30;display:flex;align-items:flex-end;justify-content:center}
@@ -206,7 +216,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-08-02.6";
+const BUILD_VERSION = "2026-08-02.7";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -2684,6 +2694,58 @@ function displayNameOf(p) {
       indicator.style.transform = `translateX(-50%) translateY(-100%)`;
     }
   });
+})();
+
+// ==============================================================
+// 水滴漣漪點擊效果（按鈕／卡片共用，純視覺，不影響原本的 onclick 邏輯）
+// ==============================================================
+(function initRippleEffect() {
+  const SELECTOR = ".btn, .icon-btn, .fab, .card, .more-card, .status-card, .viewmode-card";
+  document.addEventListener("pointerdown", (e) => {
+    const target = e.target.closest(SELECTOR);
+    if (!target) return;
+    const rect = target.getBoundingClientRect();
+    const size = Math.max(rect.width, rect.height) * 1.6;
+    const ripple = document.createElement("span");
+    ripple.className = "ripple";
+    ripple.style.width = ripple.style.height = size + "px";
+    ripple.style.left = (e.clientX - rect.left - size / 2) + "px";
+    ripple.style.top = (e.clientY - rect.top - size / 2) + "px";
+    target.appendChild(ripple);
+    ripple.addEventListener("animationend", () => ripple.remove());
+  }, { passive: true });
+})();
+
+// ==============================================================
+// 底部導覽列的水滴狀分頁指示器：用 MutationObserver 盯著 .item 的
+// class 變化（既有的分頁切換邏輯本來就是靠 classList.toggle("active",...)
+// 切換），不用去改三個角色（承辦人／申請單位／營部連隊）各自的分頁切換
+// 程式碼，指示器自己跟著切換到對的位置。
+// ==============================================================
+(function initTabIndicator() {
+  function ensureIndicator(tabbar) {
+    let ind = tabbar.querySelector(".tab-indicator");
+    if (!ind) {
+      ind = document.createElement("div");
+      ind.className = "tab-indicator";
+      tabbar.insertBefore(ind, tabbar.firstChild);
+    }
+    return ind;
+  }
+  function positionIndicator(tabbar) {
+    const items = tabbar.querySelectorAll(".item");
+    const activeIdx = Array.from(items).findIndex(el => el.classList.contains("active"));
+    const ind = ensureIndicator(tabbar);
+    if (activeIdx === -1 || items.length === 0) { ind.style.opacity = "0"; return; }
+    ind.style.width = (100 / items.length) + "%";
+    ind.style.transform = `translateX(${activeIdx * 100}%)`;
+    ind.style.opacity = "1";
+  }
+  function scan() {
+    document.querySelectorAll(".tabbar").forEach(positionIndicator);
+  }
+  new MutationObserver(scan).observe(document.body, { attributes: true, attributeFilter: ["class"], subtree: true });
+  scan();
 })();
 </script>
 </body>
