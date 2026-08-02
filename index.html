@@ -206,7 +206,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-08-02.3";
+const BUILD_VERSION = "2026-08-02.4";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -1273,6 +1273,8 @@ function drawAccountsList() {
         </div>
       </div>`).join("");
 
+  const applicantUnitDisplay = a => (a.unitCode ? a.unitCode + " - " : "") + (a.fsr_unitName || "（未設定單位名稱）");
+
   const applicantListHtml = applicantAccounts.length === 0
     ? `<div class="empty">目前還沒有申請單位帳號</div>`
     : applicantAccounts.map(a => a.id === editingApplicantId ? `
@@ -1285,7 +1287,7 @@ function drawAccountsList() {
         </div>
       </div>` : a.id === resettingPwId ? `
       <div class="card">
-        <h3 style="margin:0 0 10px">${escapeHtml(a.fsr_unitName || "（未設定單位名稱）")}</h3>
+        <h3 style="margin:0 0 10px">${escapeHtml(applicantUnitDisplay(a))}</h3>
         <div id="resetpwMsg-${a.id}"></div>
         <p style="font-size:11px;color:var(--muted);margin:0 0 10px">密碼是雜湊過的，系統本身也看不到原本的密碼，只能直接覆蓋成一組新密碼；設定後請自行告知申請單位。</p>
         <div class="field"><label>新密碼（至少 6 碼）</label><input id="newpw-${a.id}" type="password"></div>
@@ -1297,7 +1299,7 @@ function drawAccountsList() {
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
           <div style="min-width:0">
-            <h3 style="margin:0">${escapeHtml(a.fsr_unitName || "（未設定單位名稱）")}</h3>
+            <h3 style="margin:0">${escapeHtml(applicantUnitDisplay(a))}</h3>
           </div>
           <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
             <button class="icon-btn" id="resetpw-${a.id}" aria-label="重設密碼">${ICON_KEY}</button>
