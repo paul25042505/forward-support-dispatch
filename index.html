@@ -205,7 +205,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-08-01.48";
+const BUILD_VERSION = "2026-08-01.49";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -597,7 +597,11 @@ function watchPresets() {
   });
 }
 
-function unitKeyToLabel(k){ return {battalion_hq:"營部", company1:"一連", company2:"二連"}[k] || k; }
+// 回傳「單位代碼」（跟衛生營系統的 users/vehicles 的 unit 欄位共用同一套
+// 代碼：hq/co1/co2），不是中文顯示名稱——這是實際寫進 Firestore
+// 的值（forward_support_requests.assignedUnit、forward_support_assignments.unit）。
+// 顯示用的中文名稱另外查 REAL_UNIT_LABEL。
+function unitKeyToLabel(k){ return FSR_UNIT_TO_REAL_UNIT[k] || k; }
 
 // ---------------- 共用：頂部列 + 登出 ----------------
 function topbarHtml(title, sub) {
@@ -955,9 +959,9 @@ function renderDispatcherCreateView() {
     <div class="field"><label>直接分發給（選填，不選則先進待審核）</label>
       <select id="cAssign">
         <option value="">不分發，先待審核</option>
-        <option value="營部">營部</option>
-        <option value="一連">第一連</option>
-        <option value="二連">第二連</option>
+        <option value="hq">營部</option>
+        <option value="co1">第一連</option>
+        <option value="co2">第二連</option>
       </select>
     </div>
     <button class="btn btn-primary" id="createBtn">送出任務</button>`;
@@ -1094,6 +1098,9 @@ const ROLE_LABEL = { dispatcher:"業務承辦人", battalion_hq:"營部調度員
 const FSR_UNIT_TO_REAL_UNIT = { battalion_hq: "hq", company1: "co1", company2: "co2" };
 const REAL_UNIT_LABEL = { hq: "營部", co1: "第一連", co2: "第二連" };
 const SOLDIER_RANKS = ["上等兵", "一等兵", "二等兵"];
+// forward_support_requests.assignedUnit／forward_support_assignments.unit
+// 存的是 hq/co1/co2 代碼，顯示給人看時一律透過這個函式轉成中文。
+function assignedUnitLabel(code) { return REAL_UNIT_LABEL[code] || code || ""; }
 function vehicleLabelOf(v) {
   return v.plateNumber || v.vehicleNumber || v.number || v.plate || v.licensePlate || v.callSign || v.code || v.tag
     || Object.entries(v).filter(([k]) => k !== "unit" && k !== "id").map(([k, val]) => `${k}:${val}`).join(" ")
@@ -1659,9 +1666,9 @@ function openAssignPrompt(r) {
       <div style="padding:16px 20px">
         <div class="field"><label>單位</label>
           <select id="assignUnitSelect">
-            <option value="營部">營部</option>
-            <option value="一連">第一連</option>
-            <option value="二連">第二連</option>
+            <option value="hq">營部</option>
+            <option value="co1">第一連</option>
+            <option value="co2">第二連</option>
           </select>
         </div>
         <div class="btn-row">
@@ -1710,7 +1717,7 @@ async function doAssignConfirm() {
 
 async function cancelDispatch(r) {
   const extraWarning = r.status === "filled" ? "已經填寫的車長／駕駛資料也會一併清空。" : "";
-  if (!confirm(`確定要取消分發給「${r.assignedUnit || ""}」嗎？任務會退回「已核定，等待派遣人員」狀態。${extraWarning}`)) return;
+  if (!confirm(`確定要取消分發給「${assignedUnitLabel(r.assignedUnit)}」嗎？任務會退回「已核定，等待派遣人員」狀態。${extraWarning}`)) return;
   try {
     await updateDoc(doc(db, COL_REQUESTS, r.id), { status: "approved", assignedUnit: null, ...CLEARED_FILL_FIELDS });
   } catch (e) { alert("操作失敗：" + e.message); }
@@ -2388,7 +2395,7 @@ function taskCardHtml(r, withDispatchActions=false, withFillAction=false) {
     <div class="card" data-taskid="${r.id}">
       <div class="task-top">
         <span class="id">#${(r.id||"").slice(-6).toUpperCase()}</span>
-        <span class="tag ${tagClass}">${statusDisplayLabel(r)}${r.assignedUnit ? "・" + r.assignedUnit : ""}</span>
+        <span class="tag ${tagClass}">${statusDisplayLabel(r)}${r.assignedUnit ? "・" + assignedUnitLabel(r.assignedUnit) : ""}</span>
       </div>
       ${r.tagName ? `<div class="tag-chip" style="--tag-color:${escapeHtml(r.tagColor || "")}">${escapeHtml(r.tagName)}</div>` : ""}
       <h3>${escapeHtml(r.taskName || r.location || "")}</h3>
