@@ -206,7 +206,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-08-02.4";
+const BUILD_VERSION = "2026-08-02.5";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -990,7 +990,10 @@ function renderDispatcherCreateView() {
     <button class="icon-btn" id="backFromCreate" aria-label="返回" style="margin-bottom:14px">${ICON_BACK}</button>
     <div id="createMsg"></div>
     <div class="field" id="cTaskNameField"><label>任務名稱</label><input id="cTaskName" placeholder="例：成功嶺鑑測站">${presetChipsHtml()}</div>
-    <div class="field"><label>申請單位</label><input id="cUnit" placeholder="例：台中市消防局大甲分隊"></div>
+    <div class="field"><label>申請單位</label>
+      <select id="cUnitSelect"><option value="">載入中…</option></select>
+      <input id="cUnit" placeholder="請輸入單位全銜" style="margin-top:8px;display:none">
+    </div>
     <div class="row2">
       <div class="field"><label>申請人級職（選填）</label><input id="cRank" placeholder="例：分隊長"></div>
       <div class="field"><label>申請人姓名（選填）</label><input id="cName" placeholder="例：陳○○"></div>
@@ -1015,8 +1018,57 @@ function renderDispatcherCreateView() {
     <button class="btn btn-primary" id="createBtn">送出任務</button>`;
   bindTagPicker("cTagPicker");
   bindPresetChips("#cTaskNameField", "cTaskName");
+  loadApplicantUnitPicker("cUnitSelect", "cUnit", null);
   document.getElementById("createBtn").onclick = doDispatcherCreate;
   document.getElementById("backFromCreate").onclick = () => { activeSection = fabReturnSection; renderDispatcherSection(); };
+}
+
+// ---- 共用：新增／編輯任務表單的「申請單位」選取器 ----
+// 從已註冊的申請單位目錄（forward_support_units）挑選，選到已註冊單位時
+// 會記住單位代碼（供 forward_support_requests.applicantUnitCode 使用，讓
+// 該單位登入後在「我的申請」也看得到這筆——不只是看自己送出的）；找不到
+// 對應單位（還沒註冊，或本來就是一次性/未註冊的申請單位）時選「其他」，
+// 沿用原本自由輸入文字的行為，不記單位代碼。
+async function loadApplicantUnitPicker(selectId, textId, presetCode) {
+  const sel = document.getElementById(selectId);
+  const textInput = document.getElementById(textId);
+  let units = [];
+  try {
+    const snap = await getDocs(query(collection(db, COL_UNITS), orderBy("name")));
+    units = snap.docs.map(d => d.data());
+  } catch (e) { /* 目錄載入失敗仍可手動輸入，不擋住整個表單 */ }
+  sel.innerHTML = `<option value="">請選擇單位</option>`
+    + units.map(u => `<option value="${escapeHtml(u.code)}">${escapeHtml(u.code)} - ${escapeHtml(u.name)}</option>`).join("")
+    + `<option value="__other__">其他（尚未註冊的單位，手動輸入）</option>`;
+  sel.onchange = () => {
+    if (sel.value === "__other__") {
+      textInput.style.display = "";
+      textInput.value = "";
+      textInput.focus();
+    } else if (sel.value === "") {
+      textInput.style.display = "none";
+      textInput.value = "";
+    } else {
+      const u = units.find(x => x.code === sel.value);
+      textInput.style.display = "none";
+      textInput.value = u ? u.name : "";
+    }
+  };
+  if (presetCode && units.some(u => u.code === presetCode)) {
+    sel.value = presetCode;
+    sel.onchange();
+  } else if (textInput.value) {
+    // 既有文字對不到任何已註冊單位代碼（自由輸入的舊資料），選「其他」並保留原文字。
+    sel.value = "__other__";
+    textInput.style.display = "";
+  } else {
+    textInput.style.display = "none";
+  }
+}
+
+function selectedApplicantUnitCode(selectId) {
+  const val = document.getElementById(selectId).value;
+  return (val && val !== "__other__") ? val : null;
 }
 
 async function doDispatcherCreate() {
@@ -1040,7 +1092,8 @@ async function doDispatcherCreate() {
     const endTs = new Date(`${endDate}T${endTime}`);
     await addDoc(collection(db, COL_REQUESTS), {
       taskName,
-      applicantUnit: unit, applicantRank: rank, applicantName: name,
+      applicantUnit: unit, applicantUnitCode: selectedApplicantUnitCode("cUnitSelect"),
+      applicantRank: rank, applicantName: name,
       location: loc,
       taskStartTime: startTs,
       taskEndTime: endTs,
@@ -1057,6 +1110,8 @@ async function doDispatcherCreate() {
     msg.innerHTML = `<div class="msg ok">任務已建立</div>`;
     ["cTaskName","cUnit","cRank","cName","cLoc","cStartDate","cStartTime","cEndDate","cEndTime","cRemarks"].forEach(id => document.getElementById(id).value = "");
     document.getElementById("cAssign").value = "";
+    document.getElementById("cUnitSelect").value = "";
+    document.getElementById("cUnit").style.display = "none";
     pickedTagId = null;
     document.querySelectorAll("#cTagPicker .tag-pick-chip").forEach(c => c.classList.remove("selected"));
   } catch (e) {
@@ -1074,7 +1129,10 @@ function renderEditTaskView(r) {
     <button class="icon-btn" id="backFromEdit" aria-label="返回" style="margin-bottom:14px">${ICON_BACK}</button>
     <div id="editMsg"></div>
     <div class="field" id="eTaskNameField"><label>任務名稱</label><input id="eTaskName" value="${escapeHtml(r.taskName || "")}">${presetChipsHtml()}</div>
-    <div class="field"><label>申請單位</label><input id="eUnit" value="${escapeHtml(r.applicantUnit || "")}"></div>
+    <div class="field"><label>申請單位</label>
+      <select id="eUnitSelect"><option value="">載入中…</option></select>
+      <input id="eUnit" value="${escapeHtml(r.applicantUnit || "")}" style="margin-top:8px">
+    </div>
     <div class="row2">
       <div class="field"><label>申請人級職（選填）</label><input id="eRank" value="${escapeHtml(r.applicantRank || "")}"></div>
       <div class="field"><label>申請人姓名（選填）</label><input id="eName" value="${escapeHtml(r.applicantName || "")}"></div>
@@ -1091,6 +1149,7 @@ function renderEditTaskView(r) {
     <button class="btn btn-primary" id="saveEditBtn">儲存修改</button>`;
   bindTagPicker("eTagPicker");
   bindPresetChips("#eTaskNameField", "eTaskName");
+  loadApplicantUnitPicker("eUnitSelect", "eUnit", r.applicantUnitCode || null);
   document.getElementById("saveEditBtn").onclick = () => doSaveEdit(r.id);
   document.getElementById("backFromEdit").onclick = () => { activeSection = fabReturnSection; renderDispatcherSection(); };
 }
@@ -1113,7 +1172,8 @@ async function doSaveEdit(taskId) {
   try {
     await updateDoc(doc(db, COL_REQUESTS, taskId), {
       taskName,
-      applicantUnit: unit, applicantRank: rank, applicantName: name,
+      applicantUnit: unit, applicantUnitCode: selectedApplicantUnitCode("eUnitSelect"),
+      applicantRank: rank, applicantName: name,
       location: loc,
       taskStartTime: new Date(`${startDate}T${startTime}`),
       taskEndTime: new Date(`${endDate}T${endTime}`),
@@ -1992,7 +2052,8 @@ async function doCopyToDates() {
       const newEnd = new Date(newStart.getTime() + durationMs);
       await addDoc(collection(db, COL_REQUESTS), {
         taskName: src.taskName || "",
-        applicantUnit: src.applicantUnit || "", applicantRank: src.applicantRank || "", applicantName: src.applicantName || "",
+        applicantUnit: src.applicantUnit || "", applicantUnitCode: src.applicantUnitCode || null,
+        applicantRank: src.applicantRank || "", applicantName: src.applicantName || "",
         location: src.location || "",
         taskStartTime: newStart, taskEndTime: newEnd,
         remarks: src.remarks || "",
@@ -2423,6 +2484,7 @@ async function doApplicantSubmit() {
     await addDoc(collection(db, COL_REQUESTS), {
       taskName,
       applicantUnit: profile.fsr_unitName || "",
+      applicantUnitCode: profile.unitCode || null,
       applicantRank: rank, applicantName: name,
       location: loc,
       taskStartTime: new Date(`${startDate}T${startTime}`),
@@ -2451,13 +2513,34 @@ function renderApplicantMineView() {
     : allRequests.map(r => taskCardHtml(r, false, false)).join("");
 }
 
+// 申請單位看得到的任務分兩種來源合併：自己送出的（createdBy），還有承辦人
+// 「新增任務」時幫自己單位登記、選對了單位代碼的（applicantUnitCode）——
+// 兩份各自 onSnapshot、依 id 去重合併，避免拿 Firestore 的 or() 查詢處理
+// 兩個不同欄位造成額外的複合索引需求。
+let applicantReqsByCreator = [];
+let applicantReqsByUnit = [];
+function mergeApplicantRequests() {
+  const map = new Map();
+  [...applicantReqsByCreator, ...applicantReqsByUnit].forEach(r => map.set(r.id, r));
+  allRequests = Array.from(map.values())
+    .sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+  if (applicantSection === "mine") renderApplicantMineView();
+}
 function watchRequestsForApplicant() {
-  const q = query(collection(db, COL_REQUESTS), where("createdBy", "==", currentUser.uid));
-  unsubRequests = onSnapshot(q, (snap) => {
-    allRequests = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-      .sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
-    if (applicantSection === "mine") renderApplicantMineView();
+  const q1 = query(collection(db, COL_REQUESTS), where("createdBy", "==", currentUser.uid));
+  const unsub1 = onSnapshot(q1, (snap) => {
+    applicantReqsByCreator = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    mergeApplicantRequests();
   });
+  let unsub2 = () => {};
+  if (profile.unitCode) {
+    const q2 = query(collection(db, COL_REQUESTS), where("applicantUnitCode", "==", profile.unitCode));
+    unsub2 = onSnapshot(q2, (snap) => {
+      applicantReqsByUnit = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      mergeApplicantRequests();
+    });
+  }
+  unsubRequests = () => { unsub1(); unsub2(); };
 }
 
 function phoneLinkHtml(phone) {

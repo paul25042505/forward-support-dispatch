@@ -276,6 +276,72 @@
 
 貼上後按「發布」。**這裡只改了規則，程式碼那邊已經同步改好；但 Firestore 裡「既有」的任務／填寫紀錄，`assignedUnit`／`unit` 欄位還是舊的中文值，需要另外跑一次資料搬移（用服務帳戶金鑰直接處理，不需要手動改資料）。**規則跟資料兩邊沒有同時生效的話，舊資料會暫時對不上新規則，可能出現「調度員看不到自己單位已經指派的任務」這種狀況，建議規則貼完、資料搬移都做完後再讓大家繼續操作。
 
+### ⚠️ 2026-08-02 修正：新註冊的申請單位帳號其實看不到／送不出自己的任務（潛藏 bug）＋新增單位代碼比對
+
+**發現的問題：** 2026-08-01「Move applicant accounts to their own Firestore collection」那次改動，把申請單位資料從 `users` 集合搬到專屬的 `forward_support_applicant_profiles`，但規則裡的 `fsrRole()`（`isFsrApplicant()`／`isFsrDispatcher()`／`isFsrUnitRole()` 都靠它判斷角色）**忘了跟著改**，還是查 `users/{uid}`。新註冊的申請單位帳號根本不會有 `users/{uid}` 文件，`get()` 對不存在的文件求值會噴錯，導致 `forward_support_requests` 的 `allow read`／`allow create` 整條 `||` 判斷式失敗——新單位註冊後其實**送不出任務申請、也看不到自己的申請紀錄**，只是目前系統裡唯一的測試帳號（38734）剛好是搬集合之前建立的，`users/{uid}` 舊資料還留著，才沒暴露這個洞。這次順便修掉。
+
+**同時新增的功能：** 「新增任務」的申請單位欄位改成下拉選單（從已註冊單位裡選，找不到就選「其他」手動輸入），選到已註冊單位時會記一個 `applicantUnitCode` 欄位；申請單位自己的「我的申請」清單，除了看自己送出的（`createdBy`），也會多看到承辦人幫自己單位登記、且選對了單位代碼的任務。
+
+找到「前支任務申請系統」區塊最前面這幾行：
+```
+    function fsrRole() { return myUserDoc().fsr_role; }
+    function fsrUnitName() { return myUserDoc().fsr_unitName; }
+    function isFsrAdmin() { return isSignedIn() && fsrRole() == 'admin'; }
+    function isFsrDispatcher() { return isSignedIn() && fsrRole() in ['dispatcher', 'admin']; }
+    function isFsrApplicant() { return isSignedIn() && fsrRole() == 'applicant'; }
+    function isFsrUnitRole() { return isSignedIn() && fsrRole() in ['battalion_hq', 'company1', 'company2']; }
+```
+改成：
+```
+    function fsrRole() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        ? myUserDoc().fsr_role : null;
+    }
+    function isFsrAdmin() { return isSignedIn() && fsrRole() == 'admin'; }
+    function isFsrDispatcher() { return isSignedIn() && fsrRole() in ['dispatcher', 'admin']; }
+    function isFsrUnitRole() { return isSignedIn() && fsrRole() in ['battalion_hq', 'company1', 'company2']; }
+    function myApplicantDoc() {
+      return exists(/databases/$(database)/documents/forward_support_applicant_profiles/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/forward_support_applicant_profiles/$(request.auth.uid)).data : {};
+    }
+    function isFsrApplicant() { return isSignedIn() && myApplicantDoc().fsr_role == 'applicant'; }
+    function fsrUnitName() { return myApplicantDoc().fsr_unitName; }
+    function fsrApplicantUnitCode() { return myApplicantDoc().unitCode; }
+```
+
+再找到 `match /forward_support_requests/{reqId} { ... }` 裡的 `allow read`／`allow create`：
+```
+      allow read: if isSignedIn() && (
+        isFsrDispatcher() ||
+        (isFsrApplicant() && resource.data.createdBy == request.auth.uid) ||
+        (isFsrUnitRole() && resource.data.assignedUnit == fsrUnitLabel())
+      );
+      allow create: if
+        (isFsrDispatcher() && request.resource.data.createdBy == request.auth.uid
+          && request.resource.data.createdByDispatcher == true)
+        || (isFsrApplicant() && request.resource.data.createdBy == request.auth.uid
+          && request.resource.data.applicantUnit == fsrUnitName()
+          && request.resource.data.status == 'pending');
+```
+改成：
+```
+      allow read: if isSignedIn() && (
+        isFsrDispatcher() ||
+        (isFsrApplicant() && (resource.data.createdBy == request.auth.uid
+          || resource.data.applicantUnitCode == fsrApplicantUnitCode())) ||
+        (isFsrUnitRole() && resource.data.assignedUnit == fsrUnitLabel())
+      );
+      allow create: if
+        (isFsrDispatcher() && request.resource.data.createdBy == request.auth.uid
+          && request.resource.data.createdByDispatcher == true)
+        || (isFsrApplicant() && request.resource.data.createdBy == request.auth.uid
+          && request.resource.data.applicantUnit == fsrUnitName()
+          && request.resource.data.applicantUnitCode == fsrApplicantUnitCode()
+          && request.resource.data.status == 'pending');
+```
+
+貼上後按「發布」。既有的 3 筆任務資料沒有 `applicantUnitCode` 欄位（申請單位當初打的是「成功嶺鑑測中心」，不是任何已註冊單位的全銜，無法安全猜對應哪個代碼），沒有動它們——反正 `allow read` 是用 `||` 兩個條件都保留，舊資料靠 `createdBy` 還是讀得到，不影響既有功能。
+
 ---
 
 ## 第 1～4 版（歷史記錄，已被第 5 版取代，僅供參考）
