@@ -43,3 +43,50 @@ exports.resetApplicantPassword = onCall(async (request) => {
   await auth.updateUser(targetUid, { password: newPassword });
   return { ok: true };
 });
+
+const SELF_RESET_MAX_ATTEMPTS = 5;
+const SELF_RESET_WINDOW_MS = 15 * 60 * 1000;
+
+// 申請單位自己「忘記密碼」時用：不用登入，靠單位代碼＋註冊時登記的承辦人
+// 手機號碼兩者對上就能直接設新密碼，驗證強度跟現在打電話給業務承辦人口頭
+// 核對是同一個水準。單位代碼本身是公開的（forward_support_units 開放任何
+// 人讀取），所以這裡額外做失敗次數鎖定，避免有人拿單位代碼窮舉手機號碼。
+exports.selfResetApplicantPassword = onCall(async (request) => {
+  const unitCode = ((request.data && request.data.unitCode) || "").trim();
+  const phone = ((request.data && request.data.phone) || "").trim();
+  const newPassword = request.data && request.data.newPassword;
+  if (!unitCode) {
+    throw new HttpsError("invalid-argument", "缺少單位代碼");
+  }
+  if (!phone) {
+    throw new HttpsError("invalid-argument", "缺少登記的手機號碼");
+  }
+  if (!newPassword || typeof newPassword !== "string" || newPassword.length < 6) {
+    throw new HttpsError("invalid-argument", "新密碼至少需要 6 碼");
+  }
+
+  const attemptRef = db.collection("forward_support_pw_reset_attempts").doc(unitCode);
+  const attemptSnap = await attemptRef.get();
+  const now = Date.now();
+  const attempt = attemptSnap.exists ? attemptSnap.data() : null;
+  const withinWindow = attempt && (now - attempt.lastAt) < SELF_RESET_WINDOW_MS;
+  if (withinWindow && attempt.count >= SELF_RESET_MAX_ATTEMPTS) {
+    throw new HttpsError("resource-exhausted", "嘗試次數過多，請稍後再試，或洽業務承辦人協助重設");
+  }
+
+  const snap = await db.collection("forward_support_applicant_profiles")
+    .where("unitCode", "==", unitCode)
+    .where("contactPhone", "==", phone)
+    .limit(1)
+    .get();
+
+  if (snap.empty) {
+    await attemptRef.set({ count: withinWindow ? attempt.count + 1 : 1, lastAt: now });
+    throw new HttpsError("not-found", "單位代碼或登記的手機號碼不正確");
+  }
+
+  await attemptRef.delete().catch(() => {});
+  const targetUid = snap.docs[0].id;
+  await auth.updateUser(targetUid, { password: newPassword });
+  return { ok: true };
+});

@@ -206,7 +206,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-08-02.2";
+const BUILD_VERSION = "2026-08-02.3";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -362,6 +362,7 @@ onAuthStateChanged(auth, async (user) => {
 function renderLogin() {
   if (loginMode === "applicantLogin") { renderApplicantLoginView(); return; }
   if (loginMode === "applicantRegister") { renderApplicantRegisterView(); return; }
+  if (loginMode === "applicantForgot") { renderApplicantForgotPasswordView(); return; }
   $app.innerHTML = `
     <div class="auth-wrap">
       <div class="brand-mark"><span>前</span></div>
@@ -426,7 +427,7 @@ function renderApplicantLoginView() {
   document.getElementById("alBackToInternal").onclick = () => { loginMode = "internal"; renderLogin(); };
   document.getElementById("alToRegister").onclick = () => { loginMode = "applicantRegister"; renderLogin(); };
   document.getElementById("alLoginBtn").onclick = doApplicantLogin;
-  document.getElementById("alForgotPassword").onclick = showForgotPasswordContact;
+  document.getElementById("alForgotPassword").onclick = () => { loginMode = "applicantForgot"; renderLogin(); };
   loadUnitDirectoryIntoSelect("alUnit");
 }
 
@@ -443,23 +444,65 @@ async function doApplicantLogin() {
   }
 }
 
-async function showForgotPasswordContact() {
-  const msg = document.getElementById("authMsg");
-  msg.innerHTML = `<div style="font-size:11px;color:var(--muted)">查詢中…</div>`;
+// 忘記密碼頁最下面的備援聯絡資訊：單位代碼／電話對不上（例如電話後來換了、
+// 或當初登記錯）時，還是能靠人工方式聯絡業務承辦人處理。
+async function loadForgotPasswordContactFallback() {
+  const area = document.getElementById("fpContactArea");
+  if (!area) return;
+  area.innerHTML = `<p style="font-size:11px;color:var(--muted)">查詢聯絡窗口中…</p>`;
   try {
     const snap = await getDoc(doc(db, COL_CONTACT, "main"));
     const c = snap.exists() ? snap.data() : {};
     if (!c.name && !c.phoneCivilian && !c.phoneMilitary) {
-      msg.innerHTML = `<div class="msg error">尚未設定聯絡窗口，請洽系統管理員</div>`;
+      area.innerHTML = `<p style="font-size:11px;color:var(--muted)">尚未設定聯絡窗口，請洽系統管理員</p>`;
       return;
     }
     const lines = [
       c.phoneCivilian ? "民線｜" + escapeHtml(c.phoneCivilian) : "",
       c.phoneMilitary ? "軍線｜" + escapeHtml(c.phoneMilitary) : "",
     ].filter(Boolean).join("，");
-    msg.innerHTML = `<div class="msg ok">密碼問題請洽業務承辦人：${escapeHtml(c.rank || "")} ${escapeHtml(c.name || "")}${lines ? "，" + lines : ""}</div>`;
+    area.innerHTML = `<p style="font-size:11px;color:var(--muted)">單位代碼或手機號碼對不上的話，請洽業務承辦人：${escapeHtml(c.rank || "")} ${escapeHtml(c.name || "")}${lines ? "，" + lines : ""}</p>`;
   } catch (e) {
-    msg.innerHTML = `<div class="msg error">查詢失敗：${e.message}</div>`;
+    area.innerHTML = `<p style="font-size:11px;color:var(--muted)">聯絡窗口查詢失敗：${escapeHtml(e.message)}</p>`;
+  }
+}
+
+function renderApplicantForgotPasswordView() {
+  $app.innerHTML = `
+    <div class="auth-wrap">
+      <div class="brand-mark"><span>前</span></div>
+      <h1>前支任務派遣中心</h1>
+      <p class="sub">忘記密碼</p>
+      <div id="authMsg">${gateErrorText ? `<div class="msg error">${gateErrorText}</div>` : ""}</div>
+      <p style="font-size:11px;color:var(--muted);margin:0 0 14px">輸入單位跟註冊時登記的承辦人手機號碼，對得上就可以直接設定新密碼，不用打電話。</p>
+      <div class="field"><label>單位</label><select id="fpUnit"><option value="">載入中…</option></select></div>
+      <div class="field"><label>已登記的承辦人手機號碼</label><input id="fpPhone" type="tel"></div>
+      <div class="field"><label>新密碼（至少 6 碼）</label><input id="fpNewPassword" type="password"></div>
+      <button class="btn btn-primary" id="fpResetBtn">驗證並設定新密碼</button>
+      <div id="fpContactArea" style="margin-top:18px"></div>
+      <p style="text-align:center;margin-top:14px;font-size:12px"><a href="javascript:void(0)" id="fpBackToLogin">← 返回登入</a></p>
+    </div>`;
+  gateErrorText = null;
+  document.getElementById("fpBackToLogin").onclick = () => { loginMode = "applicantLogin"; renderLogin(); };
+  document.getElementById("fpResetBtn").onclick = doSelfResetApplicantPassword;
+  loadUnitDirectoryIntoSelect("fpUnit");
+  loadForgotPasswordContactFallback();
+}
+
+async function doSelfResetApplicantPassword() {
+  const msg = document.getElementById("authMsg");
+  const unitCode = document.getElementById("fpUnit").value;
+  const phone = document.getElementById("fpPhone").value.trim();
+  const newPassword = document.getElementById("fpNewPassword").value;
+  if (!unitCode || !phone) { msg.innerHTML = `<div class="msg error">請選擇單位並輸入登記的手機號碼</div>`; return; }
+  if (!newPassword || newPassword.length < 6) { msg.innerHTML = `<div class="msg error">新密碼至少需要 6 碼</div>`; return; }
+  msg.innerHTML = `<div style="font-size:11px;color:var(--muted)">驗證中…</div>`;
+  try {
+    const call = httpsCallable(functionsClient, "selfResetApplicantPassword");
+    await call({ unitCode, phone, newPassword });
+    msg.innerHTML = `<div class="msg ok">密碼已重設，請用新密碼登入</div>`;
+  } catch (e) {
+    msg.innerHTML = `<div class="msg error">${escapeHtml(e.message || "驗證失敗")}</div>`;
   }
 }
 
