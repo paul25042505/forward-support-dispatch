@@ -205,7 +205,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-08-01.46";
+const BUILD_VERSION = "2026-08-01.47";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -1688,8 +1688,8 @@ function closeAssignPrompt() {
 // 會誤導。原本存在 forward_support_assignments 的歷史紀錄不會刪除
 // （規則本來就不允許刪除），只是任務卡片不再顯示。
 const CLEARED_FILL_FIELDS = {
-  commanderRank: null, commanderName: null, commanderPhone: null, commanderEmtLevel: null,
-  driverRank: null, driverName: null, driverPhone: null, driverEmtLevel: null,
+  commanderRank: null, commanderName: null, commanderUid: null, commanderPhone: null, commanderEmtLevel: null,
+  driverRank: null, driverName: null, driverUid: null, driverPhone: null, driverEmtLevel: null,
   vehicleNumber: null,
 };
 
@@ -2133,12 +2133,14 @@ async function doFillConfirm() {
   const driverPerson = fillAllPersonnel.find(u => u.id === driverSel.value);
   // 車長／駕駛的證照等級跟手機額外複製一份到任務文件上（不只存在
   // forward_support_assignments），這樣任何看得到這筆任務卡片的人（包含
-  // 申請單位自己）才能直接在卡片上看到聯絡方式，不用另外查詢。
+  // 申請單位自己）才能直接在卡片上看到聯絡方式，不用另外查詢。commanderUid／
+  // driverUid 額外存對方在衛生營系統的帳號 uid，供未來衛生營出勤系統比對
+  // 「登入的人是不是這筆任務指定的車長／駕駛」時使用，比只比對姓名字串可靠。
   const contactFields = {
-    commanderRank, commanderName,
+    commanderRank, commanderName, commanderUid: (commanderPerson && commanderPerson.id) || null,
     commanderPhone: (commanderPerson && commanderPerson.phone) || "",
     commanderEmtLevel: (commanderPerson && commanderPerson.emtLevel) || "",
-    driverRank, driverName,
+    driverRank, driverName, driverUid: (driverPerson && driverPerson.id) || null,
     driverPhone: (driverPerson && driverPerson.phone) || "",
     driverEmtLevel: (driverPerson && driverPerson.emtLevel) || "",
     vehicleNumber,
@@ -2147,6 +2149,7 @@ async function doFillConfirm() {
     if (fillTargetDocId) {
       await updateDoc(doc(db, COL_ASSIGNMENTS, fillTargetDocId), {
         vehicleCommanderRank: commanderRank, vehicleCommanderName: commanderName,
+        commanderUid: contactFields.commanderUid, driverUid: contactFields.driverUid,
         driverRank, driverName, vehicleNumber,
       });
       await updateDoc(doc(db, COL_REQUESTS, r.id), contactFields);
@@ -2154,6 +2157,7 @@ async function doFillConfirm() {
       await addDoc(collection(db, COL_ASSIGNMENTS), {
         requestId: r.id, unit: unitKeyToLabel(fillTargetRoleKey),
         vehicleCommanderRank: commanderRank, vehicleCommanderName: commanderName,
+        commanderUid: contactFields.commanderUid, driverUid: contactFields.driverUid,
         driverRank, driverName, vehicleNumber,
         filledBy: currentUser.uid, filledAt: serverTimestamp(),
       });
