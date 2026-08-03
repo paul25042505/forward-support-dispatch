@@ -43,6 +43,11 @@
   .topbar p{margin:4px 0 0;font-size:11.5px;color:var(--muted)}
   .topbar .row{display:flex;justify-content:space-between;align-items:flex-start}
 
+  /* 橫向滑動的列表（分頁列／狀態卡／常用名稱）都隱藏原生捲軸，滑動手感
+     還在，只是不顯示那條黑色/灰色的捲軸列 */
+  .tabs, .status-cards, .preset-chip-row{scrollbar-width:none;-ms-overflow-style:none}
+  .tabs::-webkit-scrollbar, .status-cards::-webkit-scrollbar, .preset-chip-row::-webkit-scrollbar{display:none}
+
   .tabs{display:flex;gap:6px;padding:12px 20px;overflow-x:auto;background:var(--panel);border-bottom:1px solid var(--line)}
   .tab{font-family:'JetBrains Mono';font-size:11px;padding:6px 12px;border-radius:20px;background:var(--panel2);color:var(--muted);border:1px solid var(--line);white-space:nowrap;cursor:pointer;flex-shrink:0}
   .tab.active{background:color-mix(in srgb, var(--accent) 14%, transparent);color:var(--accent);border-color:var(--accent);font-weight:700}
@@ -226,7 +231,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-08-02.13";
+const BUILD_VERSION = "2026-08-02.14";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
