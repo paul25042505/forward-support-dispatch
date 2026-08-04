@@ -1,0 +1,625 @@
+// ⚠️ 這份規則部署到 medical-battalion-tracker 專案，跟「衛生營車輛人員動態
+// 管制系統」共用同一個 Firestore 資料庫（不是共用同一個 repo）。這份檔案
+// 大部分內容（users/tasks/events/vitals/... 一直到 campRegistrations）都是
+// 對方那個系統原本就有的規則，不是這個 repo 寫的——只是因為 Firestore 規則
+// 是整個專案一份檔案、無法依 repo 分開管理，兩邊各自部署時會互相覆蓋，才把
+// 完整內容存一份在這裡，方便用服務帳戶直接 `firebase deploy --only
+// firestore:rules` 重新推送、不用每次都手動去 Firebase 主控台貼。
+//
+// 只有標了「前支任務申請系統（forward_support_dispatch）」的區塊、以及
+// forward_support_requests 規則裡明確標註「衛生營出勤系統」的部分是這個
+// repo 實際維護／新增的內容，其餘都是原封不動照抄對方目前部署的版本。
+// 對方如果之後改了他們自己那些區塊的規則，這份檔案不會自動同步，需要重新
+// 比對（可以用 Firebase Rules API 抓目前實際部署的版本來 diff，見
+// firestore-rules-addition.md 2026-08-04 那節的做法）。
+//
+// 詳細異動歷史、每次修改的原因，見 firestore-rules-addition.md。
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() { return request.auth != null; }
+    function myUserDoc() { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data; }
+    // 舊資料相容：早期版本把連級主官管存成 "company_commander"。
+    function myRole() {
+      let r = myUserDoc().role;
+      return r == 'company_commander' ? 'commander' : r;
+    }
+    function myUnit() { return myUserDoc().unit; }
+    function isAdmin() { return isSignedIn() && myRole() == 'admin'; }
+    function isDutyOfficer() { return isSignedIn() && myRole() == 'duty_officer'; }
+    function isStaff() { return isAdmin() || isDutyOfficer(); } // 可查看/管理所有單位
+    function isCommander() { return isSignedIn() && myRole() == 'commander'; }
+    // 一般成員：行車紀錄器／醫官／軍品項目／政令宣導這幾類參考資料下放
+    // 給一般成員維護（見 index.html 的 canManageSharedRefData），風險比
+    // 車輛/醫院/人員與帳號/勤務管理低，不影響他人的勤務/患者資料。
+    function isMember() { return isSignedIn() && myRole() == 'member'; }
+    function isActive() { return isSignedIn() && myRole() != 'pending' && myRole() != 'disabled' && myRole() != 'unclaimed'; }
+    // 一定要是「在職帳號」才算同單位——原本只比對 isSignedIn()，沒有排除
+    // pending/disabled/unclaimed 這幾種非在職狀態。tasks/events/vitals/
+    // campRegistrations/recorders 這幾個集合的讀取規則都是
+    // `isStaff() || sameUnit(...) || ...` 這種寫法，sameUnit() 在這裡沒有
+    // 額外搭配角色檢查，等於單獨把關；帳號被停用（disabled）後，只要
+    // unit 欄位還在、登入權杖還沒失效，理論上仍然讀得到原單位的完整勤務/
+    // 回報時間軸/患者生命徵象/洽公登記——「停用」實際上只擋住新增/編輯
+    // （那些規則都有另外檢查角色），沒有真正擋住讀取，是規則本身的缺口，
+    // 不是靠前端畫面（render() 偵測到 disabled 就整頁換提示畫面）就能真正
+    // 補起來的。這裡直接把 isActive() 檢查放進 sameUnit() 本身，一次補齊
+    // 全部用到它的地方；其他呼叫 sameUnit() 的地方本來就都有額外搭配角色
+    // 檢查（isCommander()/isMember()/isDutyOfficer() 等），這幾個角色本身
+    // 已經隱含在職狀態，加上 isActive() 不會有任何影響。
+    function sameUnit(unit) { return isActive() && myUnit() == unit; }
+    // 只改了 allowedKeys 涵蓋的欄位（例如姓名/階級/電話這類「名冊類」欄位），
+    // 不管改了幾個、改成什麼值，只要沒去動 allowedKeys 以外的欄位（尤其是
+    // role/unit/email 這幾個帳號權限欄位）就算通過——update 規則用這個把關
+    // 「一般成員/主官管能不能自己把 role 或 unit 偷改掉」。
+    function onlyChanged(allowedKeys) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowedKeys);
+    }
+    // 車長／駕駛／洽公人員都是直接記錄「姓名」字串，跟登入者個人資料的
+    // displayName 比對——比對 displayName 就能知道目前登入者是不是這筆
+    // 勤務指定的人員——回報（events/vitals）只開放給這筆勤務指定的人員
+    // 本人，不能由同單位其他成員代填。額外放行建立者（createdBy）：建立
+    // 勤務當下會自動補一筆出勤事件，建立者不一定就是車長/駕駛本人（可能
+    // 是幫忙代建立），這筆系統自動寫入不能被擋下來。
+    function isAssignedToTaskData(taskData) {
+      return request.auth.uid == taskData.createdBy || (
+        taskData.type == 'liaison'
+          ? (myUserDoc().displayName in taskData.personnel)
+          : (myUserDoc().displayName == taskData.crewLeader || myUserDoc().displayName == taskData.driver)
+      );
+    }
+    // 編輯勤務用的「本人是不是這筆任務的車長/駕駛/洽公人員」判斷，故意不
+    // 比照 isAssignedToTaskData() 額外放行 createdBy——編輯權限只給「任務
+    // 裡面的人」本人（使用者的原話），代建立任務的人不算，跟事件/生命徵象
+    // 回報開放建立者代填是不同的情境，這裡不能沿用同一個函式。
+    function isCrewOfTask(taskData) {
+      return taskData.type == 'liaison'
+        ? (myUserDoc().displayName in taskData.personnel)
+        : (myUserDoc().displayName == taskData.crewLeader || myUserDoc().displayName == taskData.driver);
+    }
+    // 判斷某個時間戳記跟現在是不是台灣在地時區（UTC+8）的同一個日曆日：
+    // 兩邊都先加上 8 小時位移量再取「第幾天」比較，才是比較台灣在地的日期，
+    // 不是單純比較 UTC 日期（否則台灣已經跨日、UTC 還沒跨日這種邊界會誤判）。
+    function isSameLocalDayAsNow(ts) {
+      let tzMs = 8 * 60 * 60 * 1000;
+      return math.floor((request.time.toMillis() + tzMs) / 86400000) == math.floor((ts.toMillis() + tzMs) / 86400000);
+    }
+    // events／vitals 的回報/編輯權限：誰能回報這筆勤務（isAssignedToTaskData）
+    // ＋這筆勤務是不是「今天」建立的，兩個條件都要滿足才放行——跟 tasks
+    // 集合本身的 update 規則（isCrewOfTask + isSameLocalDayAsNow）同一套
+    // 「過了當天就算歷史紀錄，本人不能再竄改」的規則。原本 events/vitals
+    // 這兩個集合只比對 isAssignedToTaskData，沒有比對日期，導致本人被指派
+    // 過的任務不管建立於多久以前，時間軸每一步都還能無限期編輯、患者紀錄
+    // 也還能無限期新增/修改，直接違背這條既定的設計目標，這裡補上日期判斷。
+    // 只 get() 一次任務文件、同時做兩個判斷，不重複查詢。
+    function canReportOnTask(taskId) {
+      let t = get(/databases/$(database)/documents/tasks/$(taskId)).data;
+      return isAssignedToTaskData(t) && isSameLocalDayAsNow(t.createdAt);
+    }
+    // 急診待命「完成當前勤務，啟動新勤務」：把已經被新任務取代的舊待命
+    // 勤務標記完成，前端固定寫入 COMPLETED（一般待命）或 RETURNING（洽公型）
+    // 事件（見 index.html 的 silentlyCompleteTask）。這種待命勤務本來就可能
+    // 連續好幾天沒有真的出勤（一直待命中，沒被指派過任務），createdAt 因此
+    // 常常不是今天；上面 canReportOnTask() 的「限建立當天」判斷會誤擋這個
+    // 系統既定的收尾流程，導致舊勤務永遠卡在「待命中」、沒辦法真正結案。
+    // 這裡只放寬這一種情境：該任務有 erStandbyKey（只有透過急診待命頁建立
+    // 的勤務才會有這個欄位）、且要寫入的事件類型是收尾用的
+    // COMPLETED／RETURNING——不影響其他事件類型（DISPATCH／ARRIVED_SCENE
+    // 等時間軸中段步驟）也不影響沒有 erStandbyKey 的一般勤務，那些仍然套用
+    // 原本「過了當天不能再竄改」的限制。
+    //
+    // 故意不比對 isAssignedToTaskData(t)（該任務指定的車長/駕駛/建立者）：
+    // 「完成當前勤務，啟動新勤務」的整個用意就是換班——換班當下按下這顆
+    // 按鈕的人幾乎一定是「接手的新班別」，跟舊任務上記錄的舊車長/駕駛不是
+    // 同一個人，比對 isAssignedToTaskData 幾乎必定失敗（第一版修正漏想到
+    // 這點，導致換班換到不同人操作時，舊任務一樣結不了案）。改成比對
+    // sameUnit(t.unit)——跟「建立新任務」本身的權限範圍一致（一般成員只能
+    // 建立自己單位的勤務），確保只有同單位的在職成員能結掉這筆待命任務，
+    // 不開放給其他單位的成員代為結案。
+    function isStandbyClosingEvent(taskId, eventType) {
+      let t = get(/databases/$(database)/documents/tasks/$(taskId)).data;
+      return 'erStandbyKey' in t && sameUnit(t.unit)
+             && (eventType == 'COMPLETED' || eventType == 'RETURNING');
+    }
+    // 待命勤務結案時，addEvent() 會自動幫同一個地點續約下一筆待命勤務
+    // （見 index.html 的 renewStandbyTask），新任務的 unit 直接沿用舊任務
+    // 的 unit，不是操作者自己的單位。跟上面 isStandbyClosingEvent 同一個
+    // 病灶：這筆待命勤務的車長/駕駛本來就可能是「跨單位選人」借來的別單位
+    // 人員，等到這個人自己回報完成、觸發自動續約時，操作者自己帳號的單位
+    // 跟待命地點的單位當然對不上，原本 tasks 建立規則要求
+    // sameUnit(request.resource.data.unit) 會直接擋下這筆系統自動寫入，
+    // 導致醫務所悄悄失去待命車、沒有任何畫面提示（跟上面同一種「系統背景
+    // 寫入被規則誤擋」的問題）。這裡放寬：只要目標 erStandbyKey 對應到
+    // 真實存在的醫務所地點文件、任務類型固定是 duty（待命勤務唯一使用的
+    // 類型），任何在職帳號都能建立，不比對單位——跟 erStandbyKey 任務的
+    // 讀取規則本來就對全營開放（急診待命地點是全營共用資源）的精神一致。
+    function isStandbyRenewalTask(data) {
+      return isActive() && data.type == 'duty' && ('erStandbyKey' in data)
+             && exists(/databases/$(database)/documents/erStandby/$(data.erStandbyKey));
+    }
+
+    // ============ 前支任務申請系統（forward_support_dispatch）============
+    // 共用本專案的 users 集合，但用 fsr_role / fsr_unitName 這兩個獨立欄位，
+    // 跟衛生營車輛人員動態管制系統原本的 role / unit 完全分開，不會互相干擾。
+    //
+    // fsrRole() 刻意先用 exists() 檔在前面，不能直接 myUserDoc().fsr_role：
+    // 申請單位帳號（2026-08-01 搬到專屬的 forward_support_applicant_profiles
+    // 集合後）根本不會有 users/{uid} 文件，myUserDoc() 對不存在的文件 get()
+    // 求值會噴錯——如果沒有這層檔，forward_support_requests 的 allow read/
+    // create 規則裡 isFsrDispatcher()/isFsrUnitRole() 這兩個子句會先出錯，
+    // 導致整條 || 判斷式失敗，新註冊的申請單位帳號會完全看不到、也送不出
+    // 自己的任務申請（舊的測試帳號剛好在搬集合之前就有 users/{uid} 文件，
+    // 才沒發現這個洞）。回傳 null 而不是噴錯，讓 in [...] / == 判斷乾淨地
+    // 得到 false，不會拖垮整條 ||。
+    function fsrRole() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        ? myUserDoc().fsr_role : null;
+    }
+    function isFsrAdmin() { return isSignedIn() && fsrRole() == 'admin'; }
+    function isFsrDispatcher() { return isSignedIn() && fsrRole() in ['dispatcher', 'admin']; }
+    function isFsrUnitRole() { return isSignedIn() && fsrRole() in ['battalion_hq', 'company1', 'company2']; }
+    // 申請單位帳號的角色/單位資料改成查 forward_support_applicant_profiles
+    // （不是 users），理由跟上面 fsrRole() 的說明一致：同樣先用 exists() 檔著，
+    // 內部人員帳號沒有這份文件時安全回傳 {}，不會噴錯。
+    function myApplicantDoc() {
+      return exists(/databases/$(database)/documents/forward_support_applicant_profiles/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/forward_support_applicant_profiles/$(request.auth.uid)).data : {};
+    }
+    function isFsrApplicant() { return isSignedIn() && myApplicantDoc().fsr_role == 'applicant'; }
+    function fsrUnitName() { return myApplicantDoc().fsr_unitName; }
+    // 申請單位登入時用的單位代碼（跟 forward_support_units 目錄的 code 對應），
+    // 用來讓「申請單位自己的任務清單」改成看單位代碼、不是只看 createdBy——
+    // 承辦人在「新增任務」幫某個已註冊單位登記的任務，該單位登入後也要看得到
+    // （見 index.html 的 renderDispatcherCreateView／watchRequestsForApplicant）。
+    function fsrApplicantUnitCode() { return myApplicantDoc().unitCode; }
+    // 回傳單位代碼（跟衛生營系統 users/vehicles 的 unit 欄位共用同一套代碼：
+    // hq/co1/co2），不是中文名稱——這是 forward_support_requests.assignedUnit
+    // 跟 forward_support_assignments.unit 實際存的值（2026-08-01 從中文
+    // 「營部/一連/二連」改成這套代碼，跟另一個系統一致）。
+    function fsrUnitLabel() {
+      return {'battalion_hq': 'hq', 'company1': 'co1', 'company2': 'co2'}[fsrRole()];
+    }
+
+    // 帳號與人員名冊合併成同一份集合（原本 users／personnel 兩份分開維護，
+    // 一份存帳號權限、一份存花名冊，同一個人要對照兩邊資料容易搞混，也曾經
+    // 需要一支背景同步機制讓兩邊不要對不起來）。現在每個人只有一筆文件，
+    // role 多一個 'unclaimed' 狀態代表「管理員先預建好資料，這個人還沒
+    // 登入過」，登入時用信箱比對、由後端 Cloud Function（onUserCreated）
+    // 自動把這筆資料轉成用真實帳號 uid 命名的正式文件（詳見
+    // functions/index.js）。
+    //
+    // 讀取：任何在職帳號（isActive()）都能讀到全部人員的文件，不分單位——
+    // 供建立勤務「跨單位選人」使用（一般成員/主官管原本只能看自己單位，
+    // 這個查詢範圍限制讓跨單位選人這個既有功能形同虛設，2026-07-29 開放
+    // 為不分單位，換取跨單位選人真正能用）。這是文件層級的放行，同一份
+    // 文件裡的 phone/email 等欄位沒辦法只放行名冊類欄位、擋掉聯絡資訊——
+    // Firestore 規則不能做欄位層級的細粒度控制，是已知取捨；一般在職帳號
+    // 日常瀏覽的畫面（成員列表／車號查詢／統計卡）在前端各自把顯示範圍
+    // 篩回自己單位（見 index.html 的 viewMemberList／plateSearchResultsHtml／
+    // memberStatsCardHtml），不是靠這裡的查詢範圍把關，只有「跨單位選人」
+    // 這個功能本身才真的用得到全部單位的資料。
+    //
+    // 寫入分三種身分：
+    // 1) admin：什麼欄位都能改（角色/單位指派、花名冊資料都算）。
+    // 2) 本人：只能改「名冊類」欄位（displayName/rank/phone/emtLevel）跟
+    //    fcmTokens（開關推播通知要用）、pushPermission/pushDevice/
+    //    pushSubscribedAt（推播控制台用，裝置自我回報通知權限狀態／裝置
+    //    種類／訂閱時間，只有自己的裝置讀得到這些資訊，不能由他人代填），
+    //    不能碰 role/unit/email，避免自己偷改權限或跨單位。
+    // 3) 高勤官（不分單位）／主官管（限自己單位、且改前改後單位不變）：
+    //    可以改其他人的「名冊類」欄位（例如幫同單位的人補電話），但一樣
+    //    不能碰 role/unit/email——這幾個欄位的異動只有 admin 能做。
+    // 4) 前支任務系統管理者（isFsrAdmin()）：只能改 fsr_role/fsr_unitName
+    //    這兩個獨立欄位（用於「更多」頁設定內部人員角色／申請單位帳號），
+    //    不會碰到上面 role/unit/email 這些衛生營原本的欄位。
+    match /users/{uid} {
+      // 本人一定要能讀到自己的文件，而且這個判斷不能經過 isStaff()／
+      // sameUnit()（兩者都會呼叫 myUserDoc() 對自己的 uid 做 get()）：
+      // 使用者第一次登入時，自己的 users/{uid} 文件根本還不存在，
+      // get() 對不存在的文件求值會噴錯，導致整條 || 判斷式失敗、
+      // 回傳 403，新帳號會卡在「登入後初始化失敗」動彈不得。
+      // request.auth.uid == uid 純粹比對路徑跟權杖，不會呼叫 get()，
+      // 排在最前面才能確保這個 short-circuit 一定先被評估到。
+      allow read: if (isSignedIn() && request.auth.uid == uid) || isActive();
+      // 建立分兩種情境：(a) 使用者自己第一次登入，前端自動建立一筆
+      // role:'pending'、unit 空白的待審核帳號；(b) 管理員/高勤官/主官管
+      // 幫還沒登入過的人預先建立資料，role 一定要是 'unclaimed'，不能藉
+      // 這個路徑直接生出一個 admin/其他高權限帳號。
+      allow create: if (isSignedIn() && request.auth.uid == uid
+                        && request.resource.data.role == 'pending' && request.resource.data.unit == '')
+                    || (request.resource.data.role == 'unclaimed'
+                        && (isStaff() || (isCommander() && sameUnit(request.resource.data.unit))));
+      allow update: if isAdmin()
+                    // 待審核（pending）階段專用：這個階段可以自己選/改單位，
+                    // 方便管理員審核（見 index.html 的 updatePendingProfile）；
+                    // 一旦通過審核就不再適用這條，不能自己再改單位逃去別的單位。
+                    || (isSignedIn() && request.auth.uid == uid && resource.data.role == 'pending'
+                        && onlyChanged(['unit','displayName','rank','phone','emtLevel','gender','vehicles','noVehicle','fcmTokens','pushPermission','pushDevice','pushSubscribedAt']))
+                    || (isSignedIn() && request.auth.uid == uid
+                        && onlyChanged(['displayName','rank','phone','emtLevel','gender','vehicles','noVehicle','fcmTokens','pushPermission','pushDevice','pushSubscribedAt']))
+                    || ((isDutyOfficer() || (isCommander() && sameUnit(resource.data.unit) && sameUnit(request.resource.data.unit)))
+                        && onlyChanged(['displayName','rank','phone','emtLevel','gender','vehicles','noVehicle']))
+                    || (isFsrAdmin() && onlyChanged(['fsr_role','fsr_unitName']));
+      // 只能刪除還沒被登入認領過的預建資料（role 'unclaimed'）；已經是
+      // 真實帳號的文件一律不能刪除，跟原本 users 集合的規則一致。
+      allow delete: if resource.data.role == 'unclaimed'
+                    && (isStaff() || (isCommander() && sameUnit(resource.data.unit)));
+    }
+
+    // 單位編制固定（營部／第一連／第二連），僅供其他集合建立關聯，不提供編輯 UI。
+    match /units/{unitId} {
+      allow read: if isActive();
+      allow write: if isAdmin();
+    }
+
+    // 系統層級參數設定（目前只有 settings/testMode：管理員測試模式，見
+    // functions/index.js 的 isTestModeActive／index.html 的「系統設定」
+    // 頁），只有 admin 能讀寫，不開放給其他角色（含高勤官、主官管）。
+    match /settings/{id} {
+      allow read, write: if isAdmin();
+    }
+
+    // 基礎資料：車輛／行車紀錄器，依單位分類（人員已併入 users 集合，
+    // 見上方 match /users/{uid} 的說明）。
+    // Admin、高勤官可管理所有單位；主官管僅能管理自己單位的資料。
+    // 讀取比照上面 users 集合，開放給任何在職帳號、不分單位——供建立勤務
+    // 「跨單位借車」使用；一般在職帳號日常看到的車輛清單（基礎資料管理）
+    // 前端一樣篩回自己單位，理由跟 users 集合完全一致，不重複說明。
+    match /vehicles/{id} {
+      allow read: if isActive();
+      allow create: if isStaff() || (isCommander() && sameUnit(request.resource.data.unit));
+      allow update, delete: if isStaff() || (isCommander() && sameUnit(resource.data.unit) && sameUnit(request.resource.data.unit));
+    }
+    // 行車紀錄器下放給一般成員維護（比照原本連級主官管的單位範圍：只能
+    // 新增/編輯/刪除自己單位的資料，不能跨單位）。
+    match /recorders/{id} {
+      allow read: if isStaff() || sameUnit(resource.data.unit);
+      allow create: if isStaff() || ((isCommander() || isMember()) && sameUnit(request.resource.data.unit));
+      allow update, delete: if isStaff() || ((isCommander() || isMember()) && sameUnit(resource.data.unit) && sameUnit(request.resource.data.unit));
+    }
+
+    match /tasks/{taskId} {
+      // 一般勤務維持原本限制（本單位或 staff 才能讀取）。急診待命的醫務所
+      // 地點是全營共用資源，例外開放：erStandbyKey 只有透過急診待命頁建立
+      // 的勤務才會寫入這個欄位（見 index.html 的 __createTask），一般勤務
+      // 沒有這個欄位，不受這條例外影響。開放讀取的別單位待命勤務只是
+      // 調度層級的摘要（車號/車長/駕駛/值班醫官），不含患者資料——前端把
+      // 「點進去看詳情」這個動作鎖住，不代表其他單位、不給操作（見
+      // index.html 的 viewErStandby／canViewTaskDetail）；真正的患者資料
+      // （events/vitals）仍然限本單位讀取，就算前端沒鎖住點擊，點進另一個
+      // 單位的待命勤務詳情頁也看不到患者資料。
+      //
+      // 跨單位借用資源（跨單位借車／跨單位選人）時，這筆勤務會多記一個
+      // involvedUnits 陣列（借用到的別單位清單，見 index.html 的
+      // computeInvolvedUnits／createTask／updateTask）；只開放該單位的
+      // 主官管讀取（不含一般成員），且看得到完整內容（不像急診待命只給
+      // 摘要）——這是使用者明確選擇的範圍：跨單位可見性只到主官管層級，
+      // 不擴及該單位全體成員。
+      allow read: if isStaff() || sameUnit(resource.data.unit) || ('erStandbyKey' in resource.data)
+                  || (isCommander() && 'involvedUnits' in resource.data && myUnit() in resource.data.involvedUnits);
+      // 建立勤務限一般成員（限自己單位）與管理員；高勤官、主官管維持督導/查看角色，不再能自己建立。
+      // 待命勤務自動續約（isStandbyRenewalTask）是唯一的例外，見上面說明。
+      allow create: if isAdmin() || (isSignedIn() && myRole() == 'member' && sameUnit(request.resource.data.unit))
+                    || isStandbyRenewalTask(request.resource.data);
+      // 高勤官、主官管對勤務維持只有查看權限：不可編輯。一般成員只能編輯
+      // 自己被指派（車長/駕駛/洽公人員本人）的勤務，且只限建立當天——過了
+      // 當天 24:00（台灣在地時區）這筆任務就算進了紀錄查詢的歷史資料，
+      // 只剩 admin 能再改，避免本人事後任意竄改已經成為歷史紀錄的內容。
+      allow update: if isAdmin() ||
+                    (isSignedIn() && myRole() == 'member' && isCrewOfTask(resource.data) && isSameLocalDayAsNow(resource.data.createdAt));
+      // 刪除（含強制結束）僅 admin 可操作，不開放給一般成員。
+      allow delete: if isAdmin();
+    }
+
+    match /events/{eventId} {
+      // events 皆綁定 taskId 對應的勤務單位；讀取時比對該勤務的 unit，確保伺服器端也真正
+      // 限制資料存取範圍，不只是前端隱藏按鈕。
+      // 回報（建立 event）僅開放給這筆勤務指定的車長/駕駛/洽公人員本人與 admin
+      // （後台支援／強制結束用）；同單位其他成員不能代填沒有被指派到的勤務；
+      // 高勤官、主官管屬於督導/查看角色，不進行第一線回報操作。
+      //
+      // 讀取權限比對這筆 event 自己的 unit 欄位（建立時就從所屬勤務複製過來，
+      // 見 index.html 的 addEvent），不是每次都額外 get() 勤務文件查 unit——
+      // 這裡曾經用 get() 查勤務單位，但這樣一來，一般成員／主官管的清單查詢
+      // 因為 rules 判斷式依賴的是「查詢範圍以外」的另一份文件（tasks），
+      // Firestore 沒辦法單靠查詢本身的 where 條件證明每一筆結果都符合權限，
+      // 會整批查詢直接被拒絕（跟 pushLog 曾經踩過的坑同一種成因，見
+      // fsQueryEquals 的說明）；改成直接比對這筆文件自己的 unit 欄位，前端才
+      // 能加上 where unit==自己單位 的查詢條件，讓 Firestore 能夠證明查詢安全。
+      //
+      // 跨單位借用資源時同樣複製一份 involvedUnits（見 index.html 的
+      // addEvent），只開放該單位主官管讀取，理由跟上面 tasks 的說明一致——
+      // 使用者選擇讓借用單位的主官管看得到完整患者紀錄內容，不是只有摘要。
+      allow read: if isStaff() || sameUnit(resource.data.unit)
+                  || (isCommander() && 'involvedUnits' in resource.data && myUnit() in resource.data.involvedUnits);
+      // 回報/修改/刪除都要求「本人被指派＋今天建立的任務」（canReportOnTask，
+      // 跟 tasks 集合自己的 update 規則同一套「過了當天算歷史紀錄」原則）；
+      // 原本這三條只比對 isAssignedToTaskData，沒有比對日期，本人被指派過的
+      // 任務不管建立於多久以前都能無限期回報/修改/刪除，違背既定的歷史
+      // 紀錄不可竄改設計，這裡補上。
+      allow create: if isAdmin() ||
+                    (isSignedIn() && myRole() == 'member'
+                     && (canReportOnTask(request.resource.data.taskId)
+                         || isStandbyClosingEvent(request.resource.data.taskId, request.resource.data.type)));
+      // 時間、里程有時候會回報錯誤，需要能修正；開放對象跟 create 一致
+      // （admin 或該筆勤務指定的本人），維持「誰能回報、誰就能修正自己回報的內容」。
+      allow update: if isAdmin() ||
+                    (isSignedIn() && myRole() == 'member'
+                     && canReportOnTask(resource.data.taskId));
+      // 誤按到不該回報的步驟時要能整筆撤銷；開放對象跟 update 一致。rules 語言
+      // 無法查詢「這是不是這筆勤務時間軸上最後一筆事件」（沒有跨文件比較機制），
+      // 所以「只能刪最後一筆」這條限制是在前端（見 index.html 的 eventEditModal，
+      // 只有時間軸最後一筆才會顯示刪除鈕）執行，rules 這層仍然只把關「誰」能刪
+      // （限定該筆勤務指定的本人或 admin），不是把關「刪哪一筆」。
+      allow delete: if isAdmin() ||
+                    (isSignedIn() && myRole() == 'member'
+                     && canReportOnTask(resource.data.taskId));
+    }
+
+    match /vitals/{id} {
+      // 患者生命徵象/主訴紀錄，權限比照 events：誰能回報這筆勤務（admin、
+      // 該勤務指定的車長/駕駛/洽公人員本人，且限勤務建立當天）就能修正自己
+      // 填錯的內容；不開放刪除，避免病歷紀錄憑空消失。
+      // 讀取權限比對這筆 vitals 自己的 unit 欄位（建立時就從所屬勤務複製過來，
+      // 見 index.html 的 addVitalsEntry），理由跟上面 events 的說明一致。
+      // 跨單位借用資源時同樣開放該單位主官管讀取完整內容，理由跟 tasks 一致。
+      allow read: if isStaff() || sameUnit(resource.data.unit)
+                  || (isCommander() && 'involvedUnits' in resource.data && myUnit() in resource.data.involvedUnits);
+      allow create: if isAdmin() ||
+                    (isSignedIn() && myRole() == 'member'
+                     && canReportOnTask(request.resource.data.taskId));
+      allow update: if isAdmin() ||
+                    (isSignedIn() && myRole() == 'member'
+                     && canReportOnTask(resource.data.taskId));
+      allow delete: if false;
+    }
+
+    // 醫院資訊（急救責任等級/電話）是全營共用的參考資料，不綁定特定單位；
+    // 任何在職帳號都能查詢。新增一筆會影響所有單位查到的清單，只有 admin
+    // 能新增，避免高勤官/主官管誤增到重複或不精確的醫院資料；既有資料的
+    // 編輯／刪除維持原本比照基礎資料管理（admin、高勤官、主官管）不變。
+    match /hospitals/{id} {
+      allow read: if isActive();
+      allow create: if isAdmin();
+      allow update, delete: if isStaff() || isCommander();
+    }
+
+    // 醫官名冊（姓名/電話）供建立勤務的「值班醫官」欄位選用，是全營共用的
+    // 參考資料，不綁定特定單位；下放給一般成員維護。
+    match /doctors/{id} {
+      allow read: if isActive();
+      allow create, update, delete: if isStaff() || isCommander() || isMember();
+    }
+
+    // 建立勤務頁「任務名稱」快速選擇範本，是全營共用的參考資料，不綁定
+    // 特定單位；維護權限比照基礎資料管理。
+    match /taskTitleTemplates/{id} {
+      allow read: if isActive();
+      allow create, update, delete: if isStaff() || isCommander();
+    }
+
+    // 網網相連：後台管理的常用網址快速切換清單，是全營共用的參考資料，
+    // 不綁定特定單位；維護權限比照基礎資料管理。
+    match /webLinks/{id} {
+      allow read: if isActive();
+      allow create, update, delete: if isStaff() || isCommander();
+    }
+
+    // 軍品攜帶：後台管理的軍品項目名冊（武器裝備／通信裝備），是全營共用的
+    // 參考資料，不綁定特定單位；下放給一般成員維護。
+    match /militaryItems/{id} {
+      allow read: if isActive();
+      allow create, update, delete: if isStaff() || isCommander() || isMember();
+    }
+
+    // 政令宣導：軍中運輸通報／軍醫通報等公告存檔，是全營共用的查閱資料，
+    // 不綁定特定單位；純被動查閱、不推播，下放給一般成員維護。
+    match /policyNotices/{id} {
+      allow read: if isActive();
+      allow create, update, delete: if isStaff() || isCommander() || isMember();
+    }
+
+    // 健保署急診即時資訊快取（見 functions/index.js 的 syncErRealtime，每
+    // 15 分鐘排程呼叫一次），只有這支排程函式（Admin SDK，本來就不受安全
+    // 規則限制）會寫入，一般使用者/前端一律唯讀，不開放任何人直接寫入。
+    match /erRealtime/{id} {
+      allow read: if isActive();
+      allow write: if false;
+    }
+
+    // 急診待命：兩個醫務所地點固定，每筆文件只存 currentTaskId 指向目前
+    // 綁定的待命勤務（實際車號/車長/駕駛/值班醫官資料都在 tasks 集合裡）。
+    // 這個指標是建立待命勤務當下由建立者自動寫入，寫入權限比照建立勤務
+    // （admin、一般成員）；任何在職帳號都能查看。
+    match /erStandby/{id} {
+      allow read: if isActive();
+      allow create, update: if isAdmin() || (isSignedIn() && myRole() == 'member');
+      allow delete: if false;
+    }
+
+    // 問題回報／功能建議：任何在職帳號都能送出，只有 admin 能檢視（管理後台
+    // 「意見回饋」頁籤），送出後不開放使用者自己修改或刪除，避免爭議。
+    match /feedback/{id} {
+      allow read: if isAdmin();
+      allow create: if isActive() && request.auth.uid == request.resource.data.userId;
+      allow update, delete: if false;
+    }
+
+    // 通知中心（收件匣歷史紀錄）／訊息管理（公告）：任何在職帳號都能查看、
+    // 標記已讀（isRead 是整份文件共用的欄位，不分帳號各自已讀狀態，一般
+    // 帳號只開放改這一個欄位）；公告本身（新增/編輯標題內容/刪除）只有
+    // admin 能在「訊息管理」操作。
+    //
+    // 主官管、高勤官另外開放「發送推播訊息」（見 index.html 的
+    // window.__sendCommanderBroadcast）：主官管只能新增帶自己單位的訊息
+    // （不能替其他單位發送）；高勤官不像主官管有固定的單一單位（跟 admin
+    // 一樣不分單位），開放帶任一單位、或完全不帶 unit（等同全體公告）。
+    // 兩者都不開放編輯／刪除（跟 admin 的全體公告一樣，發出去就發出去了）。
+    //
+    // read 這裡刻意維持 isActive()（不分單位都能讀），沒有比照 tasks 那樣
+    // 加上單位限制：notifications 目前是「全體公告＋單位訊息」混合的單一
+    // 集合，client 端固定用不帶 where 條件的整批 list 撈全部（見
+    // notificationsPoll／fsListCollection），Firestore 對這種不帶篩選條件
+    // 的 list 查詢一樣要求規則必須「整批」都通得過、不能逐筆篩選——如果
+    // 規則依賴 resource.data.unit 個別比對，任何一則跟自己單位不同的
+    // 單位訊息存在，就會讓整批 list 直接被拒絕，連原本看得到的全體公告
+    // 也讀不到。因此這裡的隔離做在前端（見 index.html 的
+    // visiblePersonalNotifications，只有 unit 相符或沒有 unit 欄位的
+    // 全體公告才會顯示），不是嚴格的伺服器端讀取限制——單位訊息內容本身
+    // 定位為一般性的公告/連絡事項（不含患者個資），權衡後接受這個折衷。
+    match /notifications/{id} {
+      allow read: if isActive();
+      allow create: if isAdmin() || isDutyOfficer() || (isCommander() && request.resource.data.unit == myUnit());
+      allow delete: if isAdmin();
+      allow update: if isAdmin() || (isActive() && onlyChanged(['isRead']));
+    }
+
+    // 系統實際推播過的內容，個人化紀錄（見 functions/index.js 的
+    // writePushLog）：只有這則通知指定的那個人（uid 等於自己）能讀到、
+    // 能標記已讀，跟 notifications（全體共用的公告板）不一樣，不能套用
+    // 同一條「isActive() 就能讀」的規則，否則等於誰都能看到別人收到的
+    // 任務/生命徵象異常等推播內容。只有後端 Cloud Function（Admin SDK，
+    // 不受這份規則限制）會寫入/刪除，前端不開放直接新增或刪除。
+    match /pushLog/{id} {
+      allow read: if isActive() && request.auth.uid == resource.data.uid;
+      allow update: if isActive() && request.auth.uid == resource.data.uid && onlyChanged(['isRead']);
+      allow create, delete: if false;
+    }
+
+    // 洽公登記／廠商入營登記：值日官登記表，跟現有的「洽公」任務類型完全
+    // 獨立（不同集合，見 index.html 的洽公登記頁）。日期沒有時間，只記錄
+    // 當天有沒有排這筆登記；「已登記」是值日官謄寫進軍用電腦後勾選的狀態，
+    // 跟登記內容本身（地點/車輛/事由/人員或單位）分開存取控制，值日官只能
+    // 動這個狀態欄位，不能改別人送出的登記內容。
+    // 一定要是在職帳號才算值日官——原本只比對 isSignedIn()，跟 sameUnit() 是
+    // 同一類缺口：setUserRole()（index.html）只寫入 role/unit，不會清除
+    // isCampDutyOfficer 這個獨立旗標，帳號被停用（disabled）前如果曾經是
+    // 值日官，這個旗標會一直留著；campRegistrations 的讀取/更新規則有一條
+    // `isCampDutyOfficer() && unit in ['hq','co1']` 的放行條件，沒有另外
+    // 搭配角色檢查，等於單獨把關，停用後理論上仍然讀得到、還能繼續勾選/
+    // 取消成功嶺營區的洽公登記「已登記」狀態。這裡補上 isActive()，跟
+    // sameUnit() 的修法一致。
+    function isCampDutyOfficer() { return isActive() && myUserDoc().isCampDutyOfficer == true; }
+    match /campRegistrations/{id} {
+      // 讀取比照門禁登記：admin／高勤官不分單位；一般成員/主官管只看得到
+      // 自己單位的登記；值日官（獨立旗標，不分原本角色）額外看得到成功嶺
+      // 營區（營部＋第一連）的登記，方便值日時掌握整個營區的進出狀況。
+      allow read: if isStaff() || sameUnit(resource.data.unit)
+                  || (isCampDutyOfficer() && resource.data.unit in ['hq', 'co1']);
+      // 建立：任何在職帳號都能登記自己單位的（createdBy 只能填自己，不能
+      // 代別人的名義送出——人員/廠商欄位記錄「跟誰有關」，createdBy 記錄
+      // 「誰送出這筆登記」，兩者是分開的兩件事）。
+      allow create: if isActive() && request.auth.uid == request.resource.data.createdBy
+                    && sameUnit(request.resource.data.unit);
+      // 編輯：admin 不限；登記人本人可以改自己送出的登記（限在職帳號）；
+      // 值日官（成功嶺營區範圍內）只能勾選/取消「已登記」狀態相關欄位，
+      // 不能動登記內容本身。
+      allow update: if isAdmin()
+                    || (isActive() && request.auth.uid == resource.data.createdBy)
+                    || (isCampDutyOfficer() && resource.data.unit in ['hq', 'co1']
+                        && onlyChanged(['transcribed', 'transcribedBy', 'transcribedByName', 'transcribedAt']));
+      // 刪除：admin 或登記人本人（限在職帳號）。
+      allow delete: if isAdmin() || (isActive() && request.auth.uid == resource.data.createdBy);
+    }
+
+    match /forward_support_units/{unitId} {
+      allow read: if true;
+      allow create: if isSignedIn();
+      allow update, delete: if isFsrDispatcher();
+    }
+
+    // 忘記密碼時，登入頁顯示「請洽業務承辦人」用的聯絡資訊，只有這一筆
+    // 文件（forward_support_contact/main），由管理員維護。故意開放未登入
+    // 也能讀（申請單位當下就是登入不了才需要看這個），只放行這一份精簡的
+    // 聯絡卡片，不是整個 users 集合，避免把衛生營系統的人員名冊公開給
+    // 任何人。
+    match /forward_support_contact/{id} {
+      allow read: if true;
+      allow write: if isFsrAdmin();
+    }
+
+    // ⚠️ 2026-08-04 發現：衛生營出勤系統那邊自己也獨立實作了「新增勤務」頁
+    // 挑選今日前支任務的功能（跟這個 session 更早討論、使用者核准的整合
+    // 方案是同一個功能），並且在 medical-battalion-tracker 專案自己那份
+    // 規則裡也寫了一個 match /forward_support_requests/{id} 區塊。兩邊各自
+    // 部署時，Firestore 規則是整份檔案覆蓋，只會有一份存在——不是「對方
+    // 忘記保留我們的規則」，是兩邊各自維護了不相容的版本，誰後部署誰就贏，
+    // 導致兩邊系統輪流出現權限錯誤。這裡把對方需要的權限（isActive() 讀取
+    // 全部案件、以及「已指派的案件改成 filled 並填入車長駕駛車號＋
+    // claimedTaskId 防重複佔用」這個窄範圍更新）直接併進我們自己的規則，
+    // 語意照抄對方 2026-08-04 部署的版本，不要再各自維護、各自蓋掉對方。
+    match /forward_support_requests/{reqId} {
+      // 申請單位除了看自己送出的（createdBy），也要看得到承辦人「新增任務」
+      // 時幫自己單位登記、選了自己單位代碼的任務（applicantUnitCode）——
+      // 用 OR 兩個條件，保留舊資料/舊流程（單純比對 createdBy）仍然有效，
+      // 不是硬性切換成只看單位代碼。isActive() 是衛生營出勤系統那邊「新增
+      // 勤務」頁需要看到全部案件才能挑選今日前支任務，併入我們這邊。
+      allow read: if isSignedIn() && (
+        isFsrDispatcher() ||
+        (isFsrApplicant() && (resource.data.createdBy == request.auth.uid
+          || resource.data.applicantUnitCode == fsrApplicantUnitCode())) ||
+        (isFsrUnitRole() && resource.data.assignedUnit == fsrUnitLabel()) ||
+        isActive()
+      );
+      // 兩種建立來源：承辦人/管理者自己登記（新增任務／複製到其他日期功能）；
+      // 或外部申請單位透過申請人站送出。
+      allow create: if
+        (isFsrDispatcher() && request.resource.data.createdBy == request.auth.uid
+          && request.resource.data.createdByDispatcher == true)
+        || (isFsrApplicant() && request.resource.data.createdBy == request.auth.uid
+          && request.resource.data.applicantUnit == fsrUnitName()
+          && request.resource.data.applicantUnitCode == fsrApplicantUnitCode()
+          && request.resource.data.status == 'pending');
+      // 承辦人：審核／分發／駁回／編輯。各連：只能把自己被分發到的任務改成
+      // filled（第一次填寫車長／駕駛），或是已經是 filled 之後再編輯一次車長／
+      // 駕駛／證照／電話／車號這些聯絡資訊（狀態前後都維持 filled，見
+      // index.html 的 openEditFillForm／doFillConfirm）。第四個分支是衛生營
+      // 出勤系統「新增勤務」挑選今日前支任務用的：把已經指派給某單位
+      // （assigned 或 filled）的案件改成 filled、同時寫入車長/駕駛/車號，
+      // claimedTaskId 只能佔用一次（避免同單位多人同時挑到同一筆）。
+      allow update: if isFsrDispatcher()
+        || (isFsrUnitRole() && resource.data.assignedUnit == fsrUnitLabel()
+            && resource.data.status == 'assigned'
+            && request.resource.data.status == 'filled')
+        || (isFsrUnitRole() && resource.data.assignedUnit == fsrUnitLabel()
+            && resource.data.status == 'filled'
+            && request.resource.data.status == 'filled')
+        || (isActive() && (resource.data.status == 'assigned' || resource.data.status == 'filled')
+            && !('claimedTaskId' in resource.data)
+            && onlyChanged(['status', 'commanderRank', 'commanderName', 'commanderPhone', 'commanderEmtLevel',
+                            'driverRank', 'driverName', 'driverPhone', 'driverEmtLevel', 'vehicleNumber', 'claimedTaskId'])
+            && request.resource.data.status == 'filled');
+      // 只有承辦人/管理者能刪除「自己內部建立」的任務，外部單位送來的申請不能刪除。
+      allow delete: if isFsrDispatcher() && resource.data.createdByDispatcher == true;
+    }
+
+    match /forward_support_assignments/{aId} {
+      allow read: if isFsrDispatcher() || isFsrUnitRole();
+      allow create: if (isFsrUnitRole() && request.resource.data.unit == fsrUnitLabel()
+                        && request.resource.data.filledBy == request.auth.uid)
+                    || (isFsrAdmin() && request.resource.data.filledBy == request.auth.uid);
+      allow update: if (isFsrUnitRole() && resource.data.unit == fsrUnitLabel()) || isFsrAdmin();
+      allow delete: if false;
+    }
+
+    match /forward_support_tags/{tagId} {
+      allow read: if isFsrDispatcher();
+      allow write: if isFsrAdmin();
+    }
+
+    match /forward_support_task_presets/{presetId} {
+      allow read: if isFsrDispatcher();
+      allow write: if isFsrAdmin();
+    }
+
+    match /forward_support_applicant_profiles/{uid} {
+      allow read: if isFsrDispatcher() || (isSignedIn() && request.auth.uid == uid);
+      allow create: if isSignedIn() && request.auth.uid == uid
+        && request.resource.data.fsr_role == 'applicant';
+      allow update: if isFsrAdmin()
+        || (isSignedIn() && request.auth.uid == uid
+            && onlyChanged(['contactRank', 'contactName', 'contactPhone', 'contactLineId']));
+      allow delete: if isFsrAdmin();
+    }
+  }
+}
