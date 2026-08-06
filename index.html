@@ -186,11 +186,14 @@
   .copy-modal .cal-grid{grid-auto-rows:38px}
 
   /* ---------- 登入畫面 ---------- */
-  /* justify-content:center 曾經讓內容比容器高的表單（例如註冊頁欄位比較
-     多）沒辦法捲動到最上面——flexbox 置中 + overflow 的已知瀏覽器行為，
-     置中會把超出範圍的內容往兩邊擠出去，捲動軸抓不到最上面那段。改成
-     flex-start，表單從頂端開始排，內容再長都能正常捲動到底。 */
-  .auth-wrap{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;justify-content:flex-start;padding:32px 28px}
+  /* 故意不用 display:flex;flex-direction:column 排版：欄位比較多的表單
+     （例如註冊頁）內容會比容器高，flex column 預設 flex-shrink:1 會把
+     所有子元素（包含下面固定 44x44 的 logo 方框）依比例硬壓縮以塞進可視
+     範圍，logo 因此被壓成長方形、旋轉後不再是正方形菱形；overflow:auto
+     也會被這個「先壓縮、壓不下去才捲動」的行為干擾，導致捲動抓不到最上面
+     的內容。改用一般的區塊排版（無 flex），子元素維持原本大小，內容多長
+     就單純交給 overflow-y:auto 捲動，沒有壓縮的問題。 */
+  .auth-wrap{flex:1;min-height:0;overflow-y:auto;padding:32px 28px}
   .auth-wrap .brand-mark{width:44px;height:44px;border:2px solid var(--accent);border-radius:10px;display:flex;align-items:center;justify-content:center;transform:rotate(45deg);margin-bottom:20px}
   .auth-wrap .brand-mark span{transform:rotate(-45deg);font-family:'Chakra Petch';font-weight:700;color:var(--accent)}
   .auth-wrap h1{font-family:'Chakra Petch';font-size:22px;margin:0 0 4px;font-weight:700}
@@ -235,7 +238,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-08-06.1";
+const BUILD_VERSION = "2026-08-06.2";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
