@@ -186,7 +186,11 @@
   .copy-modal .cal-grid{grid-auto-rows:38px}
 
   /* ---------- 登入畫面 ---------- */
-  .auth-wrap{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;justify-content:center;padding:32px 28px}
+  /* justify-content:center 曾經讓內容比容器高的表單（例如註冊頁欄位比較
+     多）沒辦法捲動到最上面——flexbox 置中 + overflow 的已知瀏覽器行為，
+     置中會把超出範圍的內容往兩邊擠出去，捲動軸抓不到最上面那段。改成
+     flex-start，表單從頂端開始排，內容再長都能正常捲動到底。 */
+  .auth-wrap{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;justify-content:flex-start;padding:32px 28px}
   .auth-wrap .brand-mark{width:44px;height:44px;border:2px solid var(--accent);border-radius:10px;display:flex;align-items:center;justify-content:center;transform:rotate(45deg);margin-bottom:20px}
   .auth-wrap .brand-mark span{transform:rotate(-45deg);font-family:'Chakra Petch';font-weight:700;color:var(--accent)}
   .auth-wrap h1{font-family:'Chakra Petch';font-size:22px;margin:0 0 4px;font-weight:700}
@@ -231,7 +235,7 @@ const firebaseConfig = {
   appId: "1:442272611220:web:88ef96f7789200c27ded81",
 };
 
-const BUILD_VERSION = "2026-08-03.1";
+const BUILD_VERSION = "2026-08-06.1";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
